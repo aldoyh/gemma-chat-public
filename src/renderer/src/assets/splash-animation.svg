@@ -1,0 +1,41 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      @keyframes pulse {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 1; }
+      }
+      @keyframes rotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      @keyframes scale {
+        0%, 100% { transform: scale(0.8); }
+        50% { transform: scale(1.2); }
+      }
+      .dot { animation: pulse 1.5s ease-in-out infinite; }
+      .ring { animation: rotate 3s linear infinite; }
+      .center { animation: scale 2s ease-in-out infinite; }
+    </style>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="90" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="2"/>
+
+  <!-- Rotating ring -->
+  <circle cx="100" cy="100" r="70" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2" class="ring" stroke-dasharray="20 10" stroke-linecap="round"/>
+
+  <!-- Center pulsing circle -->
+  <circle cx="100" cy="100" r="40" fill="rgba(255,255,255,0.1)" class="center"/>
+
+  <!-- Inner dots in orbit -->
+  <g class="ring">
+    <circle cx="100" cy="40" r="4" fill="rgba(255,255,255,0.6)"/>
+    <circle cx="160" cy="100" r="4" fill="rgba(255,255,255,0.6)"/>
+    <circle cx="100" cy="160" r="4" fill="rgba(255,255,255,0.6)"/>
+    <circle cx="40" cy="100" r="4" fill="rgba(255,255,255,0.6)"/>
+  </g>
+
+  <!-- Center dot -->
+  <circle cx="100" cy="100" r="6" fill="rgba(255,255,255,0.8)" class="dot"/>
+</svg>

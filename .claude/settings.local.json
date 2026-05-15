@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pkill -f \"gemma-chat\")",
+      "Bash(npm run *)",
+      "Bash(pkill -f \"gemma-chat\\\\|vite\")",
+      "Bash(python3 *)",
+      "Bash(command -v ollama)",
+      "Bash(ollama --version)",
+      "Bash(curl -s http://localhost:11434/api/tags)",
+      "Bash([ -f \"$VENV_PYTHON\" ])",
+      "Bash('/Users/aldoyh/Library/Application Support/gemma-chat/mlx/venv/bin/python3' -m pip show mlx-lm)",
+      "Bash($VENV_PYTHON *)",
+      "Bash(pkill -f \"ollama serve\")",
+      "Bash(pkill -f \"ollama\")",
+      "Bash(pkill -f \"gemma-chat\\\\|vite\\\\|electron\")",
+      "Bash(pkill -f \"vite\\\\|electron\")",
+      "Bash(awk '{print \"  PID\", $2, \"- running\"}')",
+      "Bash(awk '{print \" PID\", $2, \"- running\"}')",
+      "Bash(curl -s http://localhost:11434/v1/models)",
+      "Bash(curl -s http://localhost:11435/v1/models)",
+      "Bash(awk '{if \\($1 > 0\\) print \"✅ Electron app is running\"}')",
+      "Bash(awk '{print \"MLX Process: PID\", $2, \"CPU:\", $3\"%\", \"RAM:\", $6/1024\"MB\"}')",
+      "Bash(pkill -f \"npm run dev\")",
+      "Bash(pkill -f \"mlx_lm.server\")",
+      "Bash(rm -f /tmp/debug.log)",
+      "Bash(pkill -9 -f \"npm run dev\")",
+      "Bash(pkill -9 -f \"mlx_lm\")"
+    ]
+  }
+}

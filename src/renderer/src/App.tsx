@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { DEFAULT_MODEL, type SetupStatus } from '@shared/types'
 import Setup from './components/Setup'
 import Chat from './components/Chat'
+import { I18nProvider } from './i18n/useI18n'
+import type { Language } from './i18n/useI18n'
 
 type AppState =
   | { phase: 'boot' }
@@ -9,7 +11,7 @@ type AppState =
   | { phase: 'ready'; model: string }
   | { phase: 'switching'; model: string; toModel: string; status: SetupStatus }
 
-export default function App() {
+function AppContent() {
   const [state, setState] = useState<AppState>({ phase: 'boot' })
 
   useEffect(() => {
@@ -128,10 +130,42 @@ export default function App() {
   )
 }
 
+export default function App() {
+  return (
+    <I18nProvider>
+      <AppContent />
+    </I18nProvider>
+  )
+}
+
 function BootSplash() {
   return (
-    <div className="drag flex h-full w-full items-center justify-center">
-      <div className="shimmer h-1 w-40 rounded-full" />
+    <div className="drag flex h-full w-full items-center justify-center bg-gradient-to-b from-ink-950 via-ink-900 to-black">
+      <div className="flex flex-col items-center gap-8">
+        <svg viewBox="0 0 200 200" className="h-32 w-32 drop-shadow-lg" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <style>{`
+              @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+              @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+              @keyframes scale { 0%, 100% { transform: scale(0.8); } 50% { transform: scale(1.2); } }
+              .dot { animation: pulse 1.5s ease-in-out infinite; }
+              .ring { animation: rotate 3s linear infinite; }
+              .center { animation: scale 2s ease-in-out infinite; }
+            `}</style>
+          </defs>
+          <circle cx="100" cy="100" r="90" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="2"/>
+          <circle cx="100" cy="100" r="70" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" className="ring" strokeDasharray="20 10" strokeLinecap="round"/>
+          <circle cx="100" cy="100" r="40" fill="rgba(255,255,255,0.1)" className="center"/>
+          <g className="ring">
+            <circle cx="100" cy="40" r="4" fill="rgba(255,255,255,0.6)"/>
+            <circle cx="160" cy="100" r="4" fill="rgba(255,255,255,0.6)"/>
+            <circle cx="100" cy="160" r="4" fill="rgba(255,255,255,0.6)"/>
+            <circle cx="40" cy="100" r="4" fill="rgba(255,255,255,0.6)"/>
+          </g>
+          <circle cx="100" cy="100" r="6" fill="rgba(255,255,255,0.8)" className="dot"/>
+        </svg>
+        <p className="text-sm text-ink-400">Loading Gemma Chat…</p>
+      </div>
     </div>
   )
 }

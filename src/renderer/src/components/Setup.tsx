@@ -1,4 +1,6 @@
 import { AVAILABLE_MODELS, type SetupStatus } from '@shared/types'
+import { useI18n } from '../i18n/useI18n'
+import LanguageSwitcher from './LanguageSwitcher'
 import gemmaLogoUrl from '../assets/gemma-logo.png'
 
 interface Props {
@@ -21,6 +23,7 @@ function formatBytes(n?: number): string {
 }
 
 export default function Setup({ status, model, onModelChange, onStart }: Props) {
+  const { t, language } = useI18n()
   const isWorking =
     status.stage === 'checking' ||
     status.stage === 'installing-mlx' ||
@@ -32,15 +35,17 @@ export default function Setup({ status, model, onModelChange, onStart }: Props) 
   }
 
   return (
-    <div className="drag flex h-full w-full flex-col">
-      <div className="h-9" />
+    <div className={`drag flex h-full w-full flex-col ${language === 'ar' ? 'rtl' : ''}`}>
+      <div className="flex h-9 items-center justify-end px-8">
+        <LanguageSwitcher />
+      </div>
       <div className="flex flex-1 items-center justify-center px-8">
         <div className="no-drag w-full max-w-md">
           <div className="mb-8 text-center">
             <GemmaLogo className="mx-auto mb-5 h-20 w-20" />
-            <h1 className="text-[22px] font-semibold tracking-tight">Setting things up</h1>
-            <p className="mt-1.5 text-sm text-ink-400">
-              Everything runs locally. Nothing leaves your Mac.
+            <h1 className={`text-[22px] font-semibold tracking-tight ${language === 'ar' ? 'font-tajawal' : ''}`}>{t.setup.settingUp}</h1>
+            <p className={`mt-1.5 text-sm text-ink-400 ${language === 'ar' ? 'font-tajawal' : ''}`}>
+              {t.setup.allLocal}
             </p>
           </div>
 
@@ -66,14 +71,14 @@ export default function Setup({ status, model, onModelChange, onStart }: Props) 
           )}
 
           {status.stage === 'error' && (
-            <div className="mt-6 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
-              <div className="font-medium">Something went wrong</div>
+            <div className={`mt-6 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300 ${language === 'ar' ? 'font-tajawal text-right' : ''}`}>
+              <div className="font-medium">{t.setup.error}</div>
               <div className="mt-1 text-red-300/80">{status.error}</div>
               <button
                 onClick={() => onStart(model)}
-                className="mt-3 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs hover:bg-white/10"
+                className={`mt-3 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs hover:bg-white/10 ${language === 'ar' ? 'font-tajawal' : ''}`}
               >
-                Try again
+                {t.setup.tryAgain}
               </button>
             </div>
           )}
@@ -92,24 +97,30 @@ function WelcomeScreen({
   onModelChange: (m: string) => void
   onStart: (model: string) => void
 }) {
+  const { t, language } = useI18n()
   const selected = AVAILABLE_MODELS.find((m) => m.name === model) ?? AVAILABLE_MODELS[1]
   return (
-    <div className="drag flex h-full w-full flex-col">
-      <div className="h-9" />
+    <div className={`drag flex h-full w-full flex-col ${language === 'ar' ? 'rtl' : ''}`}>
+      <div className="flex h-9 items-center justify-end px-8">
+        <LanguageSwitcher />
+      </div>
       <div className="flex flex-1 items-center justify-center px-8">
         <div className="no-drag w-full max-w-md">
           <div className="anim-fade-up mb-8 text-center">
             <GemmaLogo className="mx-auto mb-5 h-24 w-24" />
-            <h1 className="text-[26px] font-semibold tracking-tight">Welcome to Gemma Chat</h1>
-            <p className="mt-2 text-[13.5px] leading-relaxed text-ink-400">
-              A local AI assistant, powered by Google's Gemma 4.
-              <br />
-              Runs 100% on your Mac. No account, no cloud.
+            <h1 className={`text-[26px] font-semibold tracking-tight ${language === 'ar' ? 'font-tajawal' : ''}`}>{t.setup.title}</h1>
+            <p className={`mt-2 text-[13.5px] leading-relaxed text-ink-400 ${language === 'ar' ? 'font-tajawal' : ''}`}>
+              {t.setup.subtitle.split('\n').map((line, i) => (
+                <span key={i}>
+                  {line}
+                  {i === 0 && <br />}
+                </span>
+              ))}
             </p>
           </div>
 
-          <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-ink-400">
-            Pick a model
+          <div className={`mb-3 text-[11px] font-medium uppercase tracking-wider text-ink-400 ${language === 'ar' ? 'font-tajawal text-right' : ''}`}>
+            {t.setup.pickModel}
           </div>
           <div className="anim-stagger space-y-2">
             {AVAILABLE_MODELS.map((m) => (
@@ -142,12 +153,12 @@ function WelcomeScreen({
 
           <button
             onClick={() => onStart(selected.name)}
-            className="mt-6 w-full rounded-xl bg-white py-3 text-sm font-medium text-ink-900 transition hover:bg-white/90 active:scale-[0.99]"
+            className={`mt-6 w-full rounded-xl bg-white py-3 text-sm font-medium text-ink-900 transition hover:bg-white/90 active:scale-[0.99] ${language === 'ar' ? 'font-tajawal' : ''}`}
           >
-            Download {selected.label} &nbsp;·&nbsp; {selected.size}
+            {t.setup.download} {selected.label} &nbsp;·&nbsp; {selected.size}
           </button>
-          <p className="mt-3 text-center text-[11px] text-ink-400">
-            We'll install MLX runtime if needed. Model weights are cached locally.
+          <p className={`mt-3 text-center text-[11px] text-ink-400 ${language === 'ar' ? 'font-tajawal' : ''}`}>
+            {t.setup.installNote}
           </p>
         </div>
       </div>
@@ -156,11 +167,12 @@ function WelcomeScreen({
 }
 
 function StageList({ status }: { status: SetupStatus }) {
+  const { t, language } = useI18n()
   const stages: Array<{ key: SetupStatus['stage']; label: string }> = [
-    { key: 'installing-mlx', label: 'Install MLX runtime' },
-    { key: 'starting-mlx', label: 'Start runtime & load model' },
-    { key: 'downloading-model', label: 'Download model' },
-    { key: 'ready', label: 'Ready to chat' }
+    { key: 'installing-mlx', label: t.setup.stages.installing },
+    { key: 'starting-mlx', label: t.setup.stages.starting },
+    { key: 'downloading-model', label: t.setup.stages.downloading },
+    { key: 'ready', label: t.setup.stages.ready }
   ]
   const order: SetupStatus['stage'][] = [
     'checking',

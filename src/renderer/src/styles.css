@@ -22,6 +22,16 @@ body {
   user-select: none;
 }
 
+[lang='ar'],
+.rtl {
+  direction: rtl;
+  text-align: right;
+}
+
+.font-tajawal {
+  font-family: 'Tajawal', sans-serif;
+}
+
 input,
 textarea,
 .selectable {

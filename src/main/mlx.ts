@@ -308,9 +308,10 @@ export async function startServer(
     console.log('[mlx]', text.trim())
 
     // Parse HuggingFace download progress from stderr
-    // Format: "Fetching 8 files:  50%|█████     | 4/8 [00:55<00:59, 14.98s/it]"
+    // Progress bars use \r for updates: "Fetching 8 files:  50%|█████     | 4/8 [00:55<00:59, 14.98s/it]"
     if (onProgress) {
-      const lines = text.split('\n')
+      // Split on both newlines and carriage returns to capture progress updates
+      const lines = text.split(/[\r\n]+/).filter(l => l.length > 0)
       for (const line of lines) {
         // Match "Fetching N files: XX%" pattern
         const fetchMatch = line.match(/Fetching\s+(\d+)\s+files?:\s+(\d+)%.*?(\d+)\/(\d+)/)
@@ -354,7 +355,7 @@ export function stopServer(): void {
 }
 
 /**
- * Poll the server's /v1/models endpoint until it responds.
+ * Poll the server's /v1/models endpoint until the requested model is loaded.
  * If the server process exits early, throw immediately.
  */
 async function waitForHealth(
@@ -376,15 +377,22 @@ async function waitForHealth(
     try {
       const res = await fetch(`${MLX_URL}/v1/models`)
       if (res.ok) {
-        console.log('[mlx] Server is healthy')
-        return
+        const data = (await res.json()) as { data?: Array<{ id: string }> }
+        const models = (data.data ?? []).map((m) => m.id)
+        // Check if the current model is in the loaded models
+        if (currentModel && models.some((m) => m === currentModel || m.startsWith(currentModel + ':'))) {
+          console.log('[mlx] Server is healthy, model loaded')
+          return
+        }
+        // Server is up but model not loaded yet
+        console.log('[mlx] Server running, waiting for model to load...', { loaded: models, waiting: currentModel })
       }
     } catch (e) {
       lastError = e
     }
     await new Promise((r) => setTimeout(r, 1500))
   }
-  throw new Error(`MLX server did not become healthy within ${timeoutMs / 1000}s: ${String(lastError)}`)
+  throw new Error(`MLX server did not load model within ${timeoutMs / 1000}s: ${String(lastError)}`)
 }
 
 // ---------------------------------------------------------------------------
