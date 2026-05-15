@@ -184,9 +184,12 @@ function SwitchingOverlay({ status }: { status: SetupStatus }) {
                 style={{ width: `${Math.round(status.progress * 100)}%` }}
               />
             </div>
-            <p className="mt-1 text-center text-[10px] text-ink-400">
-              {Math.round(status.progress * 100)}%
-            </p>
+            <div className="mt-2 flex justify-between text-[10px] tabular-nums text-ink-400">
+              <span>{Math.round(status.progress * 100)}%</span>
+              {status.remainingSeconds != null && (
+                <span>{Math.ceil(status.remainingSeconds)}s remaining</span>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -61,11 +61,13 @@ export default function Setup({ status, model, onModelChange, onStart }: Props) 
               </div>
               <div className="mt-2 flex justify-between text-[11px] tabular-nums text-ink-400">
                 <span>{Math.round((status.progress ?? 0) * 100)}%</span>
-                {status.bytesDone != null && status.bytesTotal != null && (
+                {status.remainingSeconds != null ? (
+                  <span>{Math.ceil(status.remainingSeconds)}s remaining</span>
+                ) : status.bytesDone != null && status.bytesTotal != null ? (
                   <span>
                     {formatBytes(status.bytesDone)} / {formatBytes(status.bytesTotal)}
                   </span>
-                )}
+                ) : null}
               </div>
             </div>
           )}

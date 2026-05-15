@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { spawn, ChildProcess, spawnSync } from 'child_process'
 import { join } from 'path'
 import { existsSync, rmSync } from 'fs'
+import { AVAILABLE_MODELS } from '../shared/types'
 
 const MLX_PORT = 11435
 const MLX_HOST = `127.0.0.1:${MLX_PORT}`
@@ -264,6 +265,10 @@ export interface ServerProgress {
   message: string
   /** 0.0–1.0 progress fraction, if available */
   progress?: number
+  /** Estimated seconds remaining */
+  remainingSeconds?: number
+  /** Total estimated seconds for entire process */
+  totalSeconds?: number
 }
 
 export async function startServer(
@@ -287,6 +292,18 @@ export async function startServer(
   // Track early exit so waitForHealth can bail out immediately
   let earlyExit: { code: number | null; stderr: string } | null = null
   let stderrBuf = ''
+
+  // Get model size for time estimation
+  const modelInfo = AVAILABLE_MODELS.find(m => m.name === model)
+  const modelSizeBytes = modelInfo?.sizeBytes ?? 3_000_000_000 // default 3GB
+
+  // Metrics for progress tracking
+  let downloadStartTime = 0
+  let lastBytesDownloaded = 0
+  let downloadCompleteTime = 0
+
+  // Estimate model loading time based on size (rough: ~60MB/s on Apple Silicon)
+  const estimatedLoadTimeSeconds = Math.ceil(modelSizeBytes / 60_000_000)
 
   console.log(`[mlx] Starting server: ${python} -m mlx_lm.server --model ${model} --port ${MLX_PORT}`)
 
@@ -313,22 +330,42 @@ export async function startServer(
       // Split on both newlines and carriage returns to capture progress updates
       const lines = text.split(/[\r\n]+/).filter(l => l.length > 0)
       for (const line of lines) {
-        // Match "Fetching N files: XX%" pattern
-        const fetchMatch = line.match(/Fetching\s+(\d+)\s+files?:\s+(\d+)%.*?(\d+)\/(\d+)/)
+        // Match "Fetching N files: XX%" pattern with ETA info
+        // Format: "Fetching 8 files: 50%|█████     | 4/8 [00:55<00:59, 14.98s/it]"
+        const fetchMatch = line.match(/Fetching\s+(\d+)\s+files?:\s+(\d+)%.*?(\d+)\/(\d+)\s*\[([^\]<]+)<([^\]]+)/)
         if (fetchMatch) {
           const pct = parseInt(fetchMatch[2], 10)
           const done = parseInt(fetchMatch[3], 10)
           const total = parseInt(fetchMatch[4], 10)
-          // When download reaches 100%, switch message to indicate loading phase
+          const elapsedStr = fetchMatch[5] // "00:55"
+          const remainingStr = fetchMatch[6] // "00:59"
+
+          if (!downloadStartTime) downloadStartTime = Date.now()
+
+          // Parse elapsed and remaining times
+          const elapsedMatch = elapsedStr.match(/(\d+):(\d+)/)
+          const remainingMatch = remainingStr.match(/(\d+):(\d+)/)
+          const remainingDownloadSeconds = remainingMatch ?
+            parseInt(remainingMatch[1]) * 60 + parseInt(remainingMatch[2]) : 0
+
+          // When download reaches 100%, record completion time and calculate load estimate
           if (pct === 100) {
+            if (!downloadCompleteTime) downloadCompleteTime = Date.now()
+            const totalLoadTime = estimatedLoadTimeSeconds
             onProgress({
-              message: 'Loading model into memory…',
-              progress: 0.95
+              message: `Loading model into memory… (${totalLoadTime}s estimated)`,
+              progress: 0.95,
+              remainingSeconds: totalLoadTime,
+              totalSeconds: (downloadCompleteTime - downloadStartTime) / 1000 + totalLoadTime
             })
           } else {
+            const totalLoadTime = estimatedLoadTimeSeconds
+            const estimatedTotalSeconds = (Date.now() - downloadStartTime) / 1000 + remainingDownloadSeconds + totalLoadTime
             onProgress({
               message: `Downloading model files… ${done}/${total}`,
-              progress: pct / 100
+              progress: (pct / 100) * 0.5, // Download is first 50% of overall progress
+              remainingSeconds: remainingDownloadSeconds + totalLoadTime,
+              totalSeconds: estimatedTotalSeconds
             })
           }
           continue
@@ -350,7 +387,10 @@ export async function startServer(
 
   // Wait for the server to become healthy.
   // First run downloads model weights from HuggingFace, so allow up to 10 min.
-  await waitForHealth(600_000, () => earlyExit, onProgress)
+  await waitForHealth(600_000, () => earlyExit, onProgress, {
+    modelSize: modelSizeBytes,
+    estimatedLoadTime: estimatedLoadTimeSeconds
+  })
 }
 
 export function stopServer(): void {
@@ -369,11 +409,13 @@ export function stopServer(): void {
 async function waitForHealth(
   timeoutMs: number,
   checkEarlyExit: () => { code: number | null; stderr: string } | null,
-  onProgress?: (p: ServerProgress) => void
+  onProgress?: (p: ServerProgress) => void,
+  estimateInfo?: { modelSize: number; estimatedLoadTime: number }
 ): Promise<void> {
   const start = Date.now()
   let lastError: unknown = null
   let lastProgressSend = 0
+  const estimatedLoadSeconds = estimateInfo?.estimatedLoadTime ?? 60
 
   while (Date.now() - start < timeoutMs) {
     // Check if the server process crashed
@@ -394,13 +436,19 @@ async function waitForHealth(
           console.log('[mlx] Server is healthy, model loaded')
           return
         }
-        // Server is up but model not loaded yet - send progress update more frequently
+        // Server is up but model not loaded yet - send progress update with time estimates
         const now = Date.now()
         if (now - lastProgressSend > 1000) {
           const elapsedSec = Math.round((now - start) / 1000)
-          console.log('[mlx] Server running, waiting for model to load...', { loaded: models, waiting: currentModel, elapsedSec })
+          const remainingSec = Math.max(0, estimatedLoadSeconds - elapsedSec)
+          console.log('[mlx] Server running, waiting for model to load...', { loaded: models, waiting: currentModel, elapsedSec, remainingSec })
           if (onProgress) {
-            onProgress({ message: `Loading model into memory… (${elapsedSec}s)`, progress: 0.95 })
+            onProgress({
+              message: `Loading model into memory… (${remainingSec}s remaining)`,
+              progress: 0.5 + (elapsedSec / estimatedLoadSeconds) * 0.45, // 50% to 95% as loading progresses
+              remainingSeconds: remainingSec,
+              totalSeconds: elapsedSec + estimatedLoadSeconds
+            })
           }
           lastProgressSend = now
         }
