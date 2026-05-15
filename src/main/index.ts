@@ -1,6 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, nativeTheme, session, nativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { cpus, loadavg } from 'os'
 import { AVAILABLE_MODELS } from '@shared/types'
 import {
   locateMLX,
@@ -81,6 +82,14 @@ function send(channel: string, payload: unknown): void {
   mainWindow?.webContents.send(channel, payload)
 }
 
+function getCPULoad(): number {
+  // On macOS, use os.loadavg() as approximation
+  // This is a simple approach - in production you'd use proper CPU metrics
+  const avgLoad = loadavg()[0]
+  const numCPUs = cpus().length
+  return Math.min(100, Math.round((avgLoad / numCPUs) * 100))
+}
+
 let mlxPython: string | null = null
 
 async function ensureMLXRunning(model: string): Promise<string> {
@@ -157,7 +166,14 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
 
   const emit = (chunk: StreamChunk): void => send(channel, chunk)
 
+  let cpuUpdateInterval: NodeJS.Timeout | null = null
+
   try {
+    // Start CPU monitoring
+    cpuUpdateInterval = setInterval(() => {
+      const cpu = getCPULoad()
+      send(channel, { type: 'metrics', cpuPercent: cpu })
+    }, 500)
     const baseMessages: MLXChatMessage[] = []
 
     if (req.mode === 'code') {
@@ -441,6 +457,8 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
       emit({ type: 'error', error: (e as Error).message })
     }
   } finally {
+    // Stop monitoring when done
+    if (cpuUpdateInterval) clearInterval(cpuUpdateInterval)
     chatAbortControllers.delete(req.conversationId)
   }
 }
