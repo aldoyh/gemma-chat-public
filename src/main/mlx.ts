@@ -319,10 +319,18 @@ export async function startServer(
           const pct = parseInt(fetchMatch[2], 10)
           const done = parseInt(fetchMatch[3], 10)
           const total = parseInt(fetchMatch[4], 10)
-          onProgress({
-            message: `Downloading model files… ${done}/${total}`,
-            progress: pct / 100
-          })
+          // When download reaches 100%, switch message to indicate loading phase
+          if (pct === 100) {
+            onProgress({
+              message: 'Loading model into memory…',
+              progress: 0.95
+            })
+          } else {
+            onProgress({
+              message: `Downloading model files… ${done}/${total}`,
+              progress: pct / 100
+            })
+          }
           continue
         }
 
@@ -386,12 +394,13 @@ async function waitForHealth(
           console.log('[mlx] Server is healthy, model loaded')
           return
         }
-        // Server is up but model not loaded yet - send progress update
+        // Server is up but model not loaded yet - send progress update more frequently
         const now = Date.now()
-        if (now - lastProgressSend > 2000) {
-          console.log('[mlx] Server running, waiting for model to load...', { loaded: models, waiting: currentModel })
+        if (now - lastProgressSend > 1000) {
+          const elapsedSec = Math.round((now - start) / 1000)
+          console.log('[mlx] Server running, waiting for model to load...', { loaded: models, waiting: currentModel, elapsedSec })
           if (onProgress) {
-            onProgress({ message: 'Loading model…', progress: 0.5 })
+            onProgress({ message: `Loading model into memory… (${elapsedSec}s)`, progress: 0.95 })
           }
           lastProgressSend = now
         }
@@ -399,7 +408,7 @@ async function waitForHealth(
     } catch (e) {
       lastError = e
     }
-    await new Promise((r) => setTimeout(r, 1500))
+    await new Promise((r) => setTimeout(r, 1000))
   }
   throw new Error(`MLX server did not load model within ${timeoutMs / 1000}s: ${String(lastError)}`)
 }
