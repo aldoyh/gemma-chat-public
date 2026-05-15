@@ -10,6 +10,7 @@ import ActivityIndicator from './ActivityIndicator'
 interface Props {
   model: string
   onSwitchModel: (model: string) => void
+  onActivityChange?: (state: 'idle' | 'thinking' | 'generating') => void
 }
 
 interface Conversation {
@@ -57,7 +58,7 @@ function newId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-export default function Chat({ model, onSwitchModel }: Props) {
+export default function Chat({ model, onSwitchModel, onActivityChange }: Props) {
   const [conversations, setConversations] = useState<Conversation[]>(() => {
     const loaded = loadConversations()
     return loaded.length ? loaded : [newConversation()]
@@ -67,6 +68,11 @@ export default function Chat({ model, onSwitchModel }: Props) {
   const [activityState, setActivityState] = useState<ActivityState>('idle')
   const [cpuPercent, setCPUPercent] = useState(0)
   const streamRef = useRef<{ abort: boolean }>({ abort: false })
+
+  // Notify parent when activity state changes
+  useEffect(() => {
+    onActivityChange?.(activityState)
+  }, [activityState, onActivityChange])
 
   const activeConversation = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? conversations[0],

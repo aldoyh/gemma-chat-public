@@ -8,11 +8,16 @@ import type { Language } from './i18n/useI18n'
 type AppState =
   | { phase: 'boot' }
   | { phase: 'setup'; status: SetupStatus; model: string }
-  | { phase: 'ready'; model: string }
+  | { phase: 'ready'; model: string; activityState: 'idle' | 'thinking' | 'generating' }
   | { phase: 'switching'; model: string; toModel: string; status: SetupStatus }
 
 function AppContent() {
   const [state, setState] = useState<AppState>({ phase: 'boot' })
+  const [activityState, setActivityState] = useState<'idle' | 'thinking' | 'generating'>('idle')
+
+  const handleActivityChange = (newState: 'idle' | 'thinking' | 'generating') => {
+    setActivityState(newState)
+  }
 
   useEffect(() => {
     // Forward raw Gemma output to devtools console for debugging
@@ -27,14 +32,14 @@ function AppContent() {
           if (status.stage === 'ready') {
             // If we were switching, the new model is now ready
             if (prev.phase === 'switching') {
-              return { phase: 'ready', model: prev.toModel }
+              return { phase: 'ready', model: prev.toModel, activityState: 'idle' }
             }
-            return { phase: 'ready', model: prev.phase === 'setup' ? prev.model : DEFAULT_MODEL }
+            return { phase: 'ready', model: prev.phase === 'setup' ? prev.model : DEFAULT_MODEL, activityState: 'idle' }
           }
           if (status.stage === 'error') {
             // If switch failed, go back to the previous model
             if (prev.phase === 'switching') {
-              return { phase: 'ready', model: prev.model }
+              return { phase: 'ready', model: prev.model, activityState: 'idle' }
             }
           }
           // If we're in switching phase, keep it as switching
@@ -117,7 +122,7 @@ function AppContent() {
   if (state.phase === 'switching') {
     return (
       <div key="switching" className="anim-fade-in h-full w-full">
-        <Chat model={state.model} onSwitchModel={handleSwitchModel} />
+        <Chat model={state.model} onSwitchModel={handleSwitchModel} onActivityChange={handleActivityChange} />
         <SwitchingOverlay status={state.status} />
       </div>
     )
@@ -125,7 +130,7 @@ function AppContent() {
 
   return (
     <div key="chat" className="anim-fade-scale h-full w-full">
-      <Chat model={state.model} onSwitchModel={handleSwitchModel} />
+      <Chat model={state.model} onSwitchModel={handleSwitchModel} onActivityChange={handleActivityChange} />
     </div>
   )
 }
