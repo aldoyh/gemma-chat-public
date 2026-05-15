@@ -342,7 +342,7 @@ export async function startServer(
 
   // Wait for the server to become healthy.
   // First run downloads model weights from HuggingFace, so allow up to 10 min.
-  await waitForHealth(600_000, () => earlyExit)
+  await waitForHealth(600_000, () => earlyExit, onProgress)
 }
 
 export function stopServer(): void {
@@ -360,10 +360,12 @@ export function stopServer(): void {
  */
 async function waitForHealth(
   timeoutMs: number,
-  checkEarlyExit: () => { code: number | null; stderr: string } | null
+  checkEarlyExit: () => { code: number | null; stderr: string } | null,
+  onProgress?: (p: ServerProgress) => void
 ): Promise<void> {
   const start = Date.now()
   let lastError: unknown = null
+  let lastProgressSend = 0
 
   while (Date.now() - start < timeoutMs) {
     // Check if the server process crashed
@@ -384,8 +386,15 @@ async function waitForHealth(
           console.log('[mlx] Server is healthy, model loaded')
           return
         }
-        // Server is up but model not loaded yet
-        console.log('[mlx] Server running, waiting for model to load...', { loaded: models, waiting: currentModel })
+        // Server is up but model not loaded yet - send progress update
+        const now = Date.now()
+        if (now - lastProgressSend > 2000) {
+          console.log('[mlx] Server running, waiting for model to load...', { loaded: models, waiting: currentModel })
+          if (onProgress) {
+            onProgress({ message: 'Loading model…', progress: 0.5 })
+          }
+          lastProgressSend = now
+        }
       }
     } catch (e) {
       lastError = e
