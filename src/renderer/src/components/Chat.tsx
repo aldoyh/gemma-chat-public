@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AVAILABLE_MODELS, type AgentMode, type ChatMessage, type ToolCall, type StreamChunk } from '@shared/types'
+import { AVAILABLE_MODELS, type AgentMode, type ChatMessage, type ToolCall, type StreamChunk, type ActivityState } from '@shared/types'
 import gemmaLogoUrl from '../assets/gemma-logo.png'
 import Composer from './Composer'
 import Message from './Message'
 import Sidebar from './Sidebar'
 import Canvas from './Canvas'
+import ActivityIndicator from './ActivityIndicator'
 
 interface Props {
   model: string
@@ -63,6 +64,8 @@ export default function Chat({ model, onSwitchModel }: Props) {
   })
   const [activeId, setActiveId] = useState<string>(() => conversations[0].id)
   const [streaming, setStreaming] = useState(false)
+  const [activityState, setActivityState] = useState<ActivityState>('idle')
+  const [cpuPercent, setCPUPercent] = useState(0)
   const streamRef = useRef<{ abort: boolean }>({ abort: false })
 
   const activeConversation = useMemo(
@@ -144,6 +147,7 @@ export default function Chat({ model, onSwitchModel }: Props) {
     }))
 
     setStreaming(true)
+    setActivityState('thinking')
     streamRef.current.abort = false
 
     try {
@@ -165,6 +169,7 @@ export default function Chat({ model, onSwitchModel }: Props) {
               if (!last || last.role !== 'assistant') return c
               if (chunk.type === 'token') {
                 msgs[msgs.length - 1] = { ...last, content: last.content + chunk.text }
+                setActivityState('generating')
               } else if (chunk.type === 'tool_call') {
                 const tc: ToolCall = { ...chunk.call, running: true }
                 msgs[msgs.length - 1] = {
@@ -180,8 +185,14 @@ export default function Chat({ model, onSwitchModel }: Props) {
                 msgs[msgs.length - 1] = { ...last, toolCalls: tcs }
               } else if (chunk.type === 'activity') {
                 msgs[msgs.length - 1] = { ...last, activity: chunk.activity }
+                if (chunk.activity.kind === 'thinking') {
+                  setActivityState('thinking')
+                } else if (chunk.activity.kind === 'generating') {
+                  setActivityState('generating')
+                }
               } else if (chunk.type === 'done') {
                 msgs[msgs.length - 1] = { ...last, done: true, activity: { kind: 'idle' } }
+                setActivityState('idle')
               } else if (chunk.type === 'error') {
                 msgs[msgs.length - 1] = {
                   ...last,
@@ -190,6 +201,7 @@ export default function Chat({ model, onSwitchModel }: Props) {
                   content:
                     last.content + (last.content ? '\n\n' : '') + `⚠️ ${chunk.error}`
                 }
+                setActivityState('idle')
               }
               return { ...c, messages: msgs }
             })
@@ -198,6 +210,7 @@ export default function Chat({ model, onSwitchModel }: Props) {
       )
     } finally {
       setStreaming(false)
+      setActivityState('idle')
     }
   }
 
@@ -245,6 +258,8 @@ export default function Chat({ model, onSwitchModel }: Props) {
             onToggleMode={toggleMode}
             onToggleCanvas={toggleCanvas}
             onSwitchModel={onSwitchModel}
+            activityState={activityState}
+            cpuPercent={cpuPercent}
           />
           <MessageList
             messages={activeConversation.messages}
@@ -338,7 +353,9 @@ function Header({
   canvasOpen,
   onToggleMode,
   onToggleCanvas,
-  onSwitchModel
+  onSwitchModel,
+  activityState,
+  cpuPercent
 }: {
   model: string
   mode: AgentMode
@@ -346,6 +363,8 @@ function Header({
   onToggleMode: () => void
   onToggleCanvas: () => void
   onSwitchModel: (model: string) => void
+  activityState: ActivityState
+  cpuPercent: number
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -367,13 +386,16 @@ function Header({
   return (
     <div className="drag flex h-11 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
       <div className="min-w-[8rem]" />
-      <div className="no-drag flex items-center gap-1 rounded-lg bg-white/[0.04] p-0.5 text-[12px]">
-        <ModePill active={mode === 'chat'} onClick={() => mode === 'code' && onToggleMode()}>
-          Chat
-        </ModePill>
-        <ModePill active={mode === 'code'} onClick={() => mode === 'chat' && onToggleMode()}>
-          Build
-        </ModePill>
+      <div className="no-drag flex items-center gap-4">
+        <div className="flex items-center gap-1 rounded-lg bg-white/[0.04] p-0.5 text-[12px]">
+          <ModePill active={mode === 'chat'} onClick={() => mode === 'code' && onToggleMode()}>
+            Chat
+          </ModePill>
+          <ModePill active={mode === 'code'} onClick={() => mode === 'chat' && onToggleMode()}>
+            Build
+          </ModePill>
+        </div>
+        <ActivityIndicator state={activityState} cpuPercent={cpuPercent} />
       </div>
       <div className="no-drag flex shrink-0 items-center justify-end gap-2">
         <div className="relative" ref={pickerRef}>
