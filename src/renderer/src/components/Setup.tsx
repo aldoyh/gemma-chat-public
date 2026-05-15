@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { AVAILABLE_MODELS, type SetupStatus } from '@shared/types'
 import { useI18n } from '../i18n/useI18n'
 import LanguageSwitcher from './LanguageSwitcher'
 import gemmaLogoUrl from '../assets/gemma-logo.png'
+import AutoSelectNotification from './AutoSelectNotification'
+import FractalThinkingAnimation from './FractalThinkingAnimation'
 
 interface Props {
   status: SetupStatus
@@ -101,8 +104,30 @@ function WelcomeScreen({
 }) {
   const { t, language } = useI18n()
   const selected = AVAILABLE_MODELS.find((m) => m.name === model) ?? AVAILABLE_MODELS[1]
+  const [showNotification, setShowNotification] = useState(true)
+
+  const handleAutoSelect = () => {
+    setShowNotification(false)
+    // Find recommended model (default to E4B if not found)
+    const recommended = AVAILABLE_MODELS.find(m => m.recommended) ?? AVAILABLE_MODELS[1]
+    onStart(recommended.name)
+  }
+
+  const handleDismissNotification = () => {
+    setShowNotification(false)
+  }
+
   return (
     <div className={`drag flex h-full w-full flex-col ${language === 'ar' ? 'rtl' : ''}`}>
+      {showNotification && (
+        <AutoSelectNotification
+          modelName={selected.label}
+          onAutoSelect={handleAutoSelect}
+          onDismiss={handleDismissNotification}
+          duration={15}
+        />
+      )}
+
       <div className="flex h-9 items-center justify-end px-8">
         <LanguageSwitcher />
       </div>
@@ -128,7 +153,10 @@ function WelcomeScreen({
             {AVAILABLE_MODELS.map((m) => (
               <button
                 key={m.name}
-                onClick={() => onModelChange(m.name)}
+                onClick={() => {
+                  onModelChange(m.name)
+                  setShowNotification(false)
+                }}
                 className={`anim-fade-up group relative w-full rounded-xl border px-4 py-3 text-left transition active:scale-[0.99] ${
                   model === m.name
                     ? 'border-white/25 bg-white/[0.06]'
@@ -154,7 +182,10 @@ function WelcomeScreen({
           </div>
 
           <button
-            onClick={() => onStart(selected.name)}
+            onClick={() => {
+              setShowNotification(false)
+              onStart(selected.name)
+            }}
             className={`mt-6 w-full rounded-xl bg-white py-3 text-sm font-medium text-ink-900 transition hover:bg-white/90 active:scale-[0.99] ${language === 'ar' ? 'font-tajawal' : ''}`}
           >
             {t.setup.download} {selected.label} &nbsp;·&nbsp; {selected.size}
@@ -226,8 +257,7 @@ function StageDot({ state }: { state: 'pending' | 'active' | 'done' }) {
   if (state === 'active') {
     return (
       <div className="relative flex h-5 w-5 items-center justify-center">
-        <div className="absolute inset-0 animate-ping rounded-full bg-white/30" />
-        <div className="h-2 w-2 rounded-full bg-white" />
+        <FractalThinkingAnimation size={20} isAnimating={true} />
       </div>
     )
   }
