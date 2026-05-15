@@ -122,3 +122,10 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
 
 export const DEFAULT_MODEL = 'mlx-community/gemma-4-e4b-it-4bit'
 
+export type ActivityState = 'idle' | 'thinking' | 'generating' | 'loading'
+
+export interface SystemMetrics {
+  cpuPercent: number
+  activityState: ActivityState
+  timestamp: number
+}
