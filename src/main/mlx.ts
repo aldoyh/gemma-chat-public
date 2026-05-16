@@ -4,9 +4,9 @@ import { join } from 'path'
 import { existsSync, rmSync } from 'fs'
 import { AVAILABLE_MODELS } from '../shared/types'
 
-const MLX_PORT = 11435
+export const MLX_PORT = 11435
 const MLX_HOST = `127.0.0.1:${MLX_PORT}`
-const MLX_URL = `http://${MLX_HOST}`
+export const MLX_URL = `http://${MLX_HOST}`
 
 let serverProc: ChildProcess | null = null
 let currentModel: string | null = null
@@ -590,5 +590,3 @@ async function* readSSE(stream: ReadableStream<Uint8Array>): AsyncGenerator<stri
     }
   }
 }
-
-export { MLX_URL }
