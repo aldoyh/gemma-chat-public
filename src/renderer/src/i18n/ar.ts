@@ -17,7 +17,14 @@ export const ar = {
     starting_server: 'جاري بدء الخادم…',
     error: 'حدث خطأ',
     tryAgain: 'حاول مرة أخرى',
-    recommended: 'موصى به'
+    recommended: 'موصى به',
+    modelSource: 'مصدر النموذج',
+    downloadFromHF: 'تحميل من HuggingFace',
+    downloadFromHFDesc: 'نماذج MLX المحددة الكمية (مخزنة مؤقتًا تلقائيًا)',
+    useLocalGGUF: 'استخدام ملف GGUF محلي',
+    useLocalGGUFDesc: 'بدء تشغيل أسرع، بدون تنزيل',
+    selectModelFile: 'تحديد ملف النموذج',
+    changeFile: 'تغيير الملف'
   },
   chat: {
     placeholder: 'اكتب رسالتك…',

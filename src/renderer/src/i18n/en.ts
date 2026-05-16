@@ -17,7 +17,14 @@ export const en = {
     starting_server: 'Starting server…',
     error: 'Something went wrong',
     tryAgain: 'Try again',
-    recommended: 'Recommended'
+    recommended: 'Recommended',
+    modelSource: 'Model Source',
+    downloadFromHF: 'Download from HuggingFace',
+    downloadFromHFDesc: 'MLX-quantized models (auto-cached)',
+    useLocalGGUF: 'Use Local GGUF File',
+    useLocalGGUFDesc: 'Faster startup, no download needed',
+    selectModelFile: 'Select Model File',
+    changeFile: 'Change File'
   },
   chat: {
     placeholder: 'Type your message…',
