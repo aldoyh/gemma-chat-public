@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AVAILABLE_MODELS, type AgentMode, type ChatMessage, type ToolCall, type StreamChunk, type ActivityState } from '@shared/types'
+import { AVAILABLE_MODELS, type AgentMode, type ChatMessage, type ToolCall, type StreamChunk, type ActivityState, type ModelConfig } from '@shared/types'
 import gemmaLogoUrl from '../assets/gemma-logo.png'
 import Composer from './Composer'
 import Message from './Message'
@@ -8,8 +8,8 @@ import Canvas from './Canvas'
 import ActivityIndicator from './ActivityIndicator'
 
 interface Props {
-  model: string
-  onSwitchModel: (model: string) => void
+  modelConfig: ModelConfig
+  onSwitchModel: (config: ModelConfig) => void
   onActivityChange?: (state: 'idle' | 'thinking' | 'generating') => void
 }
 
@@ -58,7 +58,7 @@ function newId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-export default function Chat({ model, onSwitchModel, onActivityChange }: Props) {
+export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: Props) {
   const [conversations, setConversations] = useState<Conversation[]>(() => {
     const loaded = loadConversations()
     return loaded.length ? loaded : [newConversation()]
@@ -68,6 +68,9 @@ export default function Chat({ model, onSwitchModel, onActivityChange }: Props) 
   const [activityState, setActivityState] = useState<ActivityState>('idle')
   const [cpuPercent, setCPUPercent] = useState(0)
   const streamRef = useRef<{ abort: boolean }>({ abort: false })
+
+  // Extract model name for API calls (use model name for MLX, path for GGUF)
+  const modelName = modelConfig.source === 'mlx' ? (modelConfig.model || 'unknown') : (modelConfig.path || 'custom')
 
   // Notify parent when activity state changes
   useEffect(() => {
@@ -133,7 +136,7 @@ export default function Chat({ model, onSwitchModel, onActivityChange }: Props) 
       role: 'assistant',
       content: '',
       createdAt: Date.now(),
-      model,
+      model: modelName,
       toolCalls: [],
       activity: { kind: 'thinking' }
     }
@@ -161,7 +164,7 @@ export default function Chat({ model, onSwitchModel, onActivityChange }: Props) 
         {
           conversationId: activeId,
           messages: history,
-          model,
+          model: modelName,
           enableTools: true,
           mode: conv.mode
         },
@@ -258,7 +261,7 @@ export default function Chat({ model, onSwitchModel, onActivityChange }: Props) 
       <div className="flex min-w-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <Header
-            model={model}
+            modelConfig={modelConfig}
             mode={activeConversation.mode}
             canvasOpen={!!activeConversation.canvasOpen}
             onToggleMode={toggleMode}
@@ -278,7 +281,7 @@ export default function Chat({ model, onSwitchModel, onActivityChange }: Props) 
             onStop={handleStop}
             streaming={streaming}
             disabled={false}
-            model={model}
+            model={modelName}
             placeholder={
               activeConversation.mode === 'code'
                 ? 'Describe what to build — a webpage, component, or script…'
@@ -354,7 +357,7 @@ function ResizableCanvas({
 }
 
 function Header({
-  model,
+  modelConfig,
   mode,
   canvasOpen,
   onToggleMode,
@@ -363,12 +366,12 @@ function Header({
   activityState,
   cpuPercent
 }: {
-  model: string
+  modelConfig: ModelConfig
   mode: AgentMode
   canvasOpen: boolean
   onToggleMode: () => void
   onToggleCanvas: () => void
-  onSwitchModel: (model: string) => void
+  onSwitchModel: (config: ModelConfig) => void
   activityState: ActivityState
   cpuPercent: number
 }) {
@@ -387,7 +390,8 @@ function Header({
     return () => document.removeEventListener('mousedown', handleClick)
   }, [pickerOpen])
 
-  const currentLabel = AVAILABLE_MODELS.find((m) => m.name === model)?.label ?? model
+  const modelName = modelConfig.source === 'mlx' ? (modelConfig.model || 'unknown') : (modelConfig.path || 'custom')
+  const currentLabel = AVAILABLE_MODELS.find((m) => m.name === modelName)?.label ?? modelName
 
   return (
     <div className="drag flex h-11 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
@@ -425,10 +429,10 @@ function Header({
                   key={m.name}
                   onClick={() => {
                     setPickerOpen(false)
-                    if (m.name !== model) onSwitchModel(m.name)
+                    if (m.name !== modelName) onSwitchModel({ source: 'mlx', model: m.name })
                   }}
                   className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition-all duration-150 ${
-                    m.name === model
+                    m.name === modelName
                       ? 'bg-white/[0.07] text-white'
                       : 'text-ink-200 hover:bg-white/[0.04]'
                   }`}
@@ -444,7 +448,7 @@ function Header({
                     </div>
                     <div className="mt-0.5 text-[11px] text-ink-400">{m.size}</div>
                   </div>
-                  {m.name === model && (
+                  {m.name === modelName && (
                     <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>

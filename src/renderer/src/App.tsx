@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { DEFAULT_MODEL, type SetupStatus } from '@shared/types'
+import { DEFAULT_MODEL, type SetupStatus, type ModelConfig } from '@shared/types'
 import Setup from './components/Setup'
 import Chat from './components/Chat'
 import { I18nProvider } from './i18n/useI18n'
@@ -7,9 +7,9 @@ import type { Language } from './i18n/useI18n'
 
 type AppState =
   | { phase: 'boot' }
-  | { phase: 'setup'; status: SetupStatus; model: string }
-  | { phase: 'ready'; model: string; activityState: 'idle' | 'thinking' | 'generating' }
-  | { phase: 'switching'; model: string; toModel: string; status: SetupStatus }
+  | { phase: 'setup'; status: SetupStatus; modelConfig: ModelConfig }
+  | { phase: 'ready'; modelConfig: ModelConfig; activityState: 'idle' | 'thinking' | 'generating' }
+  | { phase: 'switching'; modelConfig: ModelConfig; toModelConfig: ModelConfig; status: SetupStatus }
 
 function AppContent() {
   const [state, setState] = useState<AppState>({ phase: 'boot' })
@@ -32,22 +32,28 @@ function AppContent() {
           if (status.stage === 'ready') {
             // If we were switching, the new model is now ready
             if (prev.phase === 'switching') {
-              return { phase: 'ready', model: prev.toModel, activityState: 'idle' }
+              const nextState: AppState = { phase: 'ready', modelConfig: prev.toModelConfig, activityState: 'idle' }
+              return nextState
             }
-            return { phase: 'ready', model: prev.phase === 'setup' ? prev.model : DEFAULT_MODEL, activityState: 'idle' }
+            const defaultConfig: ModelConfig = { source: 'mlx', model: DEFAULT_MODEL }
+            const nextState: AppState = { phase: 'ready', modelConfig: prev.phase === 'setup' ? prev.modelConfig : defaultConfig, activityState: 'idle' }
+            return nextState
           }
           if (status.stage === 'error') {
             // If switch failed, go back to the previous model
             if (prev.phase === 'switching') {
-              return { phase: 'ready', model: prev.model, activityState: 'idle' }
+              const nextState: AppState = { phase: 'ready', modelConfig: prev.modelConfig, activityState: 'idle' }
+              return nextState
             }
           }
           // If we're in switching phase, keep it as switching
           if (prev.phase === 'switching') {
             return { ...prev, status }
           }
-          const model = prev.phase === 'setup' ? prev.model : DEFAULT_MODEL
-          return { phase: 'setup', status, model }
+          const defaultConfig: ModelConfig = { source: 'mlx', model: DEFAULT_MODEL }
+          const modelConfig = prev.phase === 'setup' ? prev.modelConfig : defaultConfig
+          const nextState: AppState = { phase: 'setup', status, modelConfig }
+          return nextState
         })
       })
 
@@ -55,22 +61,23 @@ function AppContent() {
       const hasDefault = local.some(
         (m) => m === DEFAULT_MODEL || m.startsWith(DEFAULT_MODEL + ':')
       )
+      const defaultConfig: ModelConfig = { source: 'mlx', model: DEFAULT_MODEL }
       if (hasDefault) {
         const { hasMLX } = await window.api.checkMLX()
         if (hasMLX) {
           setState({
             phase: 'setup',
             status: { stage: 'starting-mlx', message: 'Starting model runtime…' },
-            model: DEFAULT_MODEL
+            modelConfig: defaultConfig
           })
-          window.api.startSetup(DEFAULT_MODEL)
+          window.api.startSetup(defaultConfig)
           return
         }
       }
       setState({
         phase: 'setup',
         status: { stage: 'checking', message: 'Welcome' },
-        model: DEFAULT_MODEL
+        modelConfig: defaultConfig
       })
     })()
     return () => {
@@ -79,18 +86,18 @@ function AppContent() {
     }
   }, [])
 
-  function handleSwitchModel(newModel: string): void {
+  function handleSwitchModel(newModelConfig: ModelConfig): void {
     setState((prev) => {
       if (prev.phase !== 'ready') return prev
-      if (prev.model === newModel) return prev
+      if (prev.modelConfig.source === newModelConfig.source && prev.modelConfig.model === newModelConfig.model) return prev
       return {
         phase: 'switching',
-        model: prev.model,
-        toModel: newModel,
+        modelConfig: prev.modelConfig,
+        toModelConfig: newModelConfig,
         status: { stage: 'downloading-model', message: 'Switching model…' }
       }
     })
-    window.api.switchModel(newModel)
+    window.api.switchModel(newModelConfig)
   }
 
   if (state.phase === 'boot') {
@@ -102,17 +109,17 @@ function AppContent() {
       <div key="setup" className="anim-fade-in h-full w-full">
         <Setup
           status={state.status}
-          model={state.model}
-          onModelChange={(m) =>
-            setState((s) => (s.phase === 'setup' ? { ...s, model: m } : s))
+          modelConfig={state.modelConfig}
+          onConfigChange={(config) =>
+            setState((s) => (s.phase === 'setup' ? { ...s, modelConfig: config } : s))
           }
-          onStart={(model) => {
+          onStart={(config) => {
             setState({
               phase: 'setup',
               status: { stage: 'checking', message: 'Checking system…' },
-              model
+              modelConfig: config
             })
-            window.api.startSetup(model)
+            window.api.startSetup(config)
           }}
         />
       </div>
@@ -122,7 +129,7 @@ function AppContent() {
   if (state.phase === 'switching') {
     return (
       <div key="switching" className="anim-fade-in h-full w-full">
-        <Chat model={state.model} onSwitchModel={handleSwitchModel} onActivityChange={handleActivityChange} />
+        <Chat modelConfig={state.modelConfig} onSwitchModel={handleSwitchModel} onActivityChange={handleActivityChange} />
         <SwitchingOverlay status={state.status} />
       </div>
     )
@@ -130,7 +137,7 @@ function AppContent() {
 
   return (
     <div key="chat" className="anim-fade-scale h-full w-full">
-      <Chat model={state.model} onSwitchModel={handleSwitchModel} onActivityChange={handleActivityChange} />
+      <Chat modelConfig={state.modelConfig} onSwitchModel={handleSwitchModel} onActivityChange={handleActivityChange} />
     </div>
   )
 }
