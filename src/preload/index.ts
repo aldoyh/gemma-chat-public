@@ -4,13 +4,14 @@ import type {
   SetupStatus,
   StreamChunk,
   WorkspaceInfo,
-  WorkspaceFile
+  WorkspaceFile,
+  ModelConfig
 } from '../shared/types'
 
 const api = {
-  startSetup: (model: string): Promise<void> => ipcRenderer.invoke('setup:start', model),
+  startSetup: (modelConfig: ModelConfig): Promise<void> => ipcRenderer.invoke('setup:start', modelConfig),
 
-  switchModel: (model: string): Promise<void> => ipcRenderer.invoke('model:switch', model),
+  switchModel: (modelConfig: ModelConfig): Promise<void> => ipcRenderer.invoke('model:switch', modelConfig),
 
   checkMLX: (): Promise<{ hasMLX: boolean }> => ipcRenderer.invoke('setup:status'),
 
