@@ -129,3 +129,11 @@ export interface SystemMetrics {
   activityState: ActivityState
   timestamp: number
 }
+
+export type ModelSource = 'mlx' | 'local'
+
+export interface ModelConfig {
+  source: ModelSource
+  path?: string // For local GGUF: absolute path to .gguf file
+  model?: string // For MLX: HuggingFace model ID
+}
