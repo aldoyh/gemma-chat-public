@@ -5,6 +5,8 @@ import type { InferenceBackend, BackendStatus, ChatStreamOptions, BackendStreamC
 
 interface LoadedModel {
   llama: Llama
+  model: any // The loaded model instance
+  context: any // The inference context
   modelPath: string
 }
 
@@ -24,11 +26,32 @@ export class GGUFBackend implements InferenceBackend {
   async shutdown(): Promise<void> {
     if (this.loadedModel) {
       try {
+        // Dispose context first
+        if (this.loadedModel.context) {
+          this.loadedModel.context.dispose()
+        }
+      } catch (e) {
+        console.error('[gguf-backend] Error disposing context:', e)
+      }
+
+      try {
+        // Dispose model
+        if (this.loadedModel.model) {
+          this.loadedModel.model.dispose()
+        }
+      } catch (e) {
+        console.error('[gguf-backend] Error disposing model:', e)
+      }
+
+      try {
+        // Dispose Llama instance
         await this.loadedModel.llama.dispose()
       } catch (e) {
         console.error('[gguf-backend] Error disposing Llama:', e)
       }
+
       this.loadedModel = null
+      this.modelPath = null
     }
   }
 
@@ -51,7 +74,7 @@ export class GGUFBackend implements InferenceBackend {
       throw new Error(`Model file not found: ${fullPath}`)
     }
 
-    // Shutdown previous model if loaded
+    // Shutdown previous model if different path
     if (this.loadedModel && this.loadedModel.modelPath !== fullPath) {
       await this.shutdown()
     }
@@ -67,8 +90,21 @@ export class GGUFBackend implements InferenceBackend {
         gpu: 'auto'
       })
 
+      // Load the model once and keep it in memory
+      const model = await llama.loadModel({
+        modelPath: fullPath
+      })
+
+      // Create a persistent context for inference
+      const context = await model.createContext({
+        sequences: 1,
+        threads: 4
+      })
+
       this.loadedModel = {
         llama,
+        model,
+        context,
         modelPath: fullPath
       }
       this.modelPath = fullPath
@@ -94,22 +130,12 @@ export class GGUFBackend implements InferenceBackend {
       throw new Error('No model loaded. Call loadModel() first.')
     }
 
-    const { llama, modelPath } = this.loadedModel
+    const { model, context } = this.loadedModel
 
     // Build messages in chat format
     const messages = opts.messages.map(m => `${m.role}: ${m.content}`).join('\n') + '\nassistant:'
 
     try {
-      // Load the model and create a context for inference
-      const model = await llama.loadModel({
-        modelPath: modelPath
-      })
-
-      const context = await model.createContext({
-        sequences: 1,
-        threads: 4
-      })
-
       // Get a sequence for generation
       const sequence = context.getSequence()
 
@@ -133,10 +159,8 @@ export class GGUFBackend implements InferenceBackend {
 
       yield { done: true }
 
-      // Cleanup
+      // Cleanup only the sequence, not the context (reuse it)
       sequence.dispose()
-      context.dispose()
-      model.dispose()
     } catch (e) {
       if ((e as Error).name === 'AbortError') {
         yield { done: true }
