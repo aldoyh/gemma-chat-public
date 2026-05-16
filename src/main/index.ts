@@ -6,6 +6,7 @@ import { AVAILABLE_MODELS } from '@shared/types'
 import {
   switchBackend,
   getCurrentBackend,
+  getCurrentBackendType,
   shutdownBackend,
   type InferenceBackend
 } from './inference'
@@ -86,13 +87,13 @@ function getCPULoad(): number {
   return Math.min(100, Math.round((avgLoad / numCPUs) * 100))
 }
 
-let currentBackendType: 'mlx' | 'gguf' | null = null
-
 async function ensureBackendRunning(modelConfig: ModelConfig): Promise<InferenceBackend> {
   const backend = getCurrentBackend()
 
   // If backend already running with same config, return it
-  if (backend && currentBackendType === modelConfig.source) {
+  const backendType = getCurrentBackendType()
+  const targetType = modelConfig.source === 'mlx' ? 'mlx' : 'gguf'
+  if (backend && backendType === targetType) {
     return backend
   }
 
@@ -117,9 +118,8 @@ async function ensureBackendRunning(modelConfig: ModelConfig): Promise<Inference
       const modelName = modelConfig.model || 'mlx-community/gemma-4-e4b-it-4bit'
       await mlxBackend.loadModel(modelName)
 
-      currentBackendType = 'mlx'
       return mlxBackend
-    } else if (modelConfig.source === 'local') {
+    } else if (modelConfig.source === 'gguf') {
       // GGUF path: use local file
       if (!modelConfig.path) {
         throw new Error('GGUF path required for local model source')
@@ -134,7 +134,6 @@ async function ensureBackendRunning(modelConfig: ModelConfig): Promise<Inference
       const ggufBackend = getCurrentBackend()
       if (!ggufBackend) throw new Error('Failed to initialize GGUF backend')
 
-      currentBackendType = 'gguf'
       return ggufBackend
     } else {
       throw new Error(`Unknown model source: ${modelConfig.source}`)
@@ -520,14 +519,21 @@ app.whenReady().then(async () => {
     })
 
     try {
-      await switchBackend(
-        modelConfig.source === 'mlx' ? 'mlx' : 'gguf',
-        { modelPath: modelConfig.path }
-      )
-      const backend = getCurrentBackend()
-      if (backend && modelConfig.source === 'mlx' && modelConfig.model) {
-        await backend.loadModel(modelConfig.model)
+      if (modelConfig.source === 'mlx') {
+        // MLX path: switch backend, then load model
+        await switchBackend('mlx')
+        const backend = getCurrentBackend()
+        if (backend && modelConfig.model) {
+          await backend.loadModel(modelConfig.model)
+        }
+      } else {
+        // GGUF path: switch backend with model path
+        if (!modelConfig.path) {
+          throw new Error('GGUF path required for local model source')
+        }
+        await switchBackend('gguf', { modelPath: modelConfig.path })
       }
+
       send('setup:status', { stage: 'ready', message: 'Ready to chat.' })
     } catch (e) {
       send('setup:status', {
@@ -600,6 +606,18 @@ app.whenReady().then(async () => {
       return { text: '' }
     }
   )
+
+  ipcMain.handle('dialog:open-file', async (_e, options) => {
+    if (!mainWindow) {
+      throw new Error('Main window not available')
+    }
+
+    const { dialog } = require('electron')
+    return dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: options?.filters || [{ name: 'All Files', extensions: ['*'] }]
+    })
+  })
 
   createWindow()
 
