@@ -4,15 +4,11 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { cpus, loadavg } from 'os'
 import { AVAILABLE_MODELS } from '@shared/types'
 import {
-  locateMLX,
-  installMLX,
-  startServer,
-  stopServer,
-  hasModel,
-  chatStream,
-  listLocalModels,
-  type MLXChatMessage
-} from './mlx'
+  switchBackend,
+  getCurrentBackend,
+  shutdownBackend,
+  type InferenceBackend
+} from './inference'
 import {
   TOOLS,
   chatSystemPrompt,
@@ -33,7 +29,7 @@ import {
   workspaceDir,
   wsWriteFile
 } from './workspace'
-import type { ChatRequest, StreamChunk, ToolCall } from '../shared/types'
+import type { ChatRequest, StreamChunk, ToolCall, ModelConfig } from '../shared/types'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -90,54 +86,68 @@ function getCPULoad(): number {
   return Math.min(100, Math.round((avgLoad / numCPUs) * 100))
 }
 
-let mlxPython: string | null = null
+let currentBackendType: 'mlx' | 'gguf' | null = null
 
-async function ensureMLXRunning(model: string): Promise<string> {
-  let mlx = locateMLX()
-  if (!mlx) {
-    throw new Error(
-      'Python 3.10–3.13 not found. Install via Homebrew: brew install python@3.13'
-    )
+async function ensureBackendRunning(modelConfig: ModelConfig): Promise<InferenceBackend> {
+  const backend = getCurrentBackend()
+
+  // If backend already running with same config, return it
+  if (backend && currentBackendType === modelConfig.source) {
+    return backend
   }
 
-  let pythonToUse = mlx.python
-
-  if (!mlx.installed) {
-    send('setup:status', {
-      stage: 'installing-mlx',
-      message: 'Installing MLX runtime…'
-    })
-    // installMLX creates the venv and returns the venv python path
-    pythonToUse = await installMLX((p) => {
-      send('setup:status', {
-        stage: 'installing-mlx',
-        message: p.message
-      })
-    })
-  }
-
-  mlxPython = pythonToUse
-
-  const label = AVAILABLE_MODELS.find((m) => m.name === model)?.label ?? model
-  send('setup:status', { stage: 'starting-mlx', message: 'Starting model runtime…' })
+  // Switch to the appropriate backend
   send('setup:status', {
-    stage: 'downloading-model',
-    message: `Loading ${label}… (first run downloads the model)`
+    stage: 'checking',
+    message: `Preparing ${modelConfig.source} backend…`
   })
-  await startServer(pythonToUse, model, (p) => {
-    send('setup:status', {
-      stage: 'downloading-model',
-      message: p.message,
-      progress: p.progress
-    })
-  })
-  return pythonToUse
+
+  try {
+    if (modelConfig.source === 'mlx') {
+      // MLX path: check/install Python, install MLX, download model
+      await switchBackend('mlx')
+      const mlxBackend = getCurrentBackend()
+      if (!mlxBackend) throw new Error('Failed to initialize MLX backend')
+
+      send('setup:status', {
+        stage: 'starting-mlx',
+        message: 'Starting model runtime…'
+      })
+
+      const modelName = modelConfig.model || 'mlx-community/gemma-4-e4b-it-4bit'
+      await mlxBackend.loadModel(modelName)
+
+      currentBackendType = 'mlx'
+      return mlxBackend
+    } else if (modelConfig.source === 'local') {
+      // GGUF path: use local file
+      if (!modelConfig.path) {
+        throw new Error('GGUF path required for local model source')
+      }
+
+      send('setup:status', {
+        stage: 'downloading-model',
+        message: `Loading local model: ${modelConfig.path}…`
+      })
+
+      await switchBackend('gguf', { modelPath: modelConfig.path })
+      const ggufBackend = getCurrentBackend()
+      if (!ggufBackend) throw new Error('Failed to initialize GGUF backend')
+
+      currentBackendType = 'gguf'
+      return ggufBackend
+    } else {
+      throw new Error(`Unknown model source: ${modelConfig.source}`)
+    }
+  } catch (e) {
+    throw new Error(`Backend initialization failed: ${(e as Error).message}`)
+  }
 }
 
-async function handleSetup(model: string): Promise<void> {
+async function handleSetup(modelConfig: ModelConfig): Promise<void> {
   try {
     send('setup:status', { stage: 'checking', message: 'Checking system…' })
-    await ensureMLXRunning(model)
+    await ensureBackendRunning(modelConfig)
     send('setup:status', { stage: 'ready', message: 'Ready to chat.' })
   } catch (e) {
     send('setup:status', {
@@ -174,7 +184,7 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
       const cpu = getCPULoad()
       send(channel, { type: 'metrics', cpuPercent: cpu })
     }, 500)
-    const baseMessages: MLXChatMessage[] = []
+    const baseMessages: Array<{ role: 'user' | 'assistant' | 'system' | 'tool'; content: string }> = []
 
     if (req.mode === 'code') {
       const wsPath = await ensureWorkspace(req.conversationId)
@@ -185,7 +195,7 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
     }
 
     for (const m of req.messages) {
-      baseMessages.push({ role: m.role as MLXChatMessage['role'], content: m.content })
+      baseMessages.push({ role: m.role as 'user' | 'assistant' | 'system' | 'tool', content: m.content })
       if (m.toolCalls) {
         for (const tc of m.toolCalls) {
           if (tc.result != null) {
@@ -269,7 +279,12 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
         }
       }
 
-      streamLoop: for await (const chunk of chatStream({
+      const backend = getCurrentBackend()
+      if (!backend) {
+        throw new Error('No inference backend available. Call handleSetup first.')
+      }
+
+      streamLoop: for await (const chunk of backend.chat({
         model: req.model,
         messages: baseMessages,
         signal: abort.signal
@@ -490,28 +505,29 @@ app.whenReady().then(async () => {
   })
   session.defaultSession.setPermissionCheckHandler(() => true)
 
-  ipcMain.handle('setup:start', async (_e, model: string) => {
-    await handleSetup(model)
+  ipcMain.handle('setup:start', async (_e, modelConfig: ModelConfig) => {
+    await handleSetup(modelConfig)
   })
 
-  ipcMain.handle('model:switch', async (_e, model: string) => {
-    const label = AVAILABLE_MODELS.find((m) => m.name === model)?.label ?? model
+  ipcMain.handle('model:switch', async (_e, modelConfig: ModelConfig) => {
+    const label = modelConfig.source === 'mlx'
+      ? AVAILABLE_MODELS.find((m) => m.name === modelConfig.model)?.label
+      : 'Local GGUF'
+
     send('setup:status', {
       stage: 'downloading-model',
       message: `Switching to ${label}…`
     })
+
     try {
-      await stopServer()
-      if (!mlxPython) {
-        throw new Error('MLX Python path not available. Please restart the app.')
+      await switchBackend(
+        modelConfig.source === 'mlx' ? 'mlx' : 'gguf',
+        { modelPath: modelConfig.path }
+      )
+      const backend = getCurrentBackend()
+      if (backend && modelConfig.source === 'mlx' && modelConfig.model) {
+        await backend.loadModel(modelConfig.model)
       }
-      await startServer(mlxPython, model, (p) => {
-        send('setup:status', {
-          stage: 'downloading-model',
-          message: p.message,
-          progress: p.progress
-        })
-      })
       send('setup:status', { stage: 'ready', message: 'Ready to chat.' })
     } catch (e) {
       send('setup:status', {
@@ -523,12 +539,17 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle('setup:status', async () => {
-    const mlx = locateMLX()
-    return { hasMLX: !!(mlx && mlx.installed) }
+    const backend = getCurrentBackend()
+    const isReady = backend ? await backend.isReady() : false
+    return { hasMLX: isReady }
   })
 
   ipcMain.handle('models:list-local', async () => {
-    return listLocalModels()
+    const backend = getCurrentBackend()
+    if (!backend) {
+      return []
+    }
+    return await backend.listModels()
   })
 
   ipcMain.handle('chat:send', async (_e, req: ChatRequest) => {
@@ -597,6 +618,6 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  stopServer()
+  shutdownBackend()
   stopWorkspaceServer()
 })
