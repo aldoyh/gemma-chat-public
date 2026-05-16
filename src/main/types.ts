@@ -10,4 +10,4 @@ export interface BackendManager {
   getStatus(): Promise<BackendStatus>
 }
 
-export { type InferenceBackend, type BackendType, type BackendStatus, type ChatStreamOptions } from './inference/base'
+export { type InferenceBackend, type BackendType, type BackendStatus, type ChatStreamOptions, type BackendStreamChunk } from './inference/base'

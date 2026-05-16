@@ -14,7 +14,7 @@ export interface ChatStreamOptions {
   temperature?: number
 }
 
-export interface StreamChunk {
+export interface BackendStreamChunk {
   content?: string
   done?: boolean
 }
@@ -29,7 +29,7 @@ export interface InferenceBackend {
   isReady(): Promise<boolean>
 
   // Chat
-  chat(opts: ChatStreamOptions): AsyncGenerator<StreamChunk>
+  chat(opts: ChatStreamOptions): AsyncGenerator<BackendStreamChunk>
 
   // Model management
   listModels(): Promise<string[]>
