@@ -7,15 +7,14 @@ import {
 } from '../mlx'
 import type { InferenceBackend, BackendStatus, ChatStreamOptions, BackendStreamChunk } from './base'
 
-let mlxPython: string | null = null
-
 export class MLXBackend implements InferenceBackend {
   private currentModel: string | null = null
+  private mlxPython: string | null = null
 
   async initialize(): Promise<void> {
     const status = await this.getStatus()
-    if (!status.available) {
-      throw new Error('MLX not available: ' + status.message)
+    if (!status.available || !status.installed) {
+      throw new Error('MLX initialization failed: ' + status.message)
     }
   }
 
@@ -61,10 +60,10 @@ export class MLXBackend implements InferenceBackend {
       throw new Error('MLX not installed. Run initialization first.')
     }
 
-    mlxPython = mlx.python
+    this.mlxPython = mlx.python
 
     // Start server with the model
-    await startServer(mlxPython, modelName, (progress) => {
+    await startServer(this.mlxPython, modelName, (progress) => {
       // Progress callback — caller can implement
       console.log('[mlx-backend]', progress.message)
     })
@@ -82,8 +81,8 @@ export class MLXBackend implements InferenceBackend {
   }
 
   async *chat(opts: ChatStreamOptions): AsyncGenerator<BackendStreamChunk> {
-    if (!mlxPython) {
-      throw new Error('MLX Python not initialized')
+    if (!this.mlxPython || !this.currentModel) {
+      throw new Error('No model loaded. Call loadModel() before chat.')
     }
 
     for await (const chunk of chatStream({
