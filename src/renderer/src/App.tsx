@@ -8,16 +8,11 @@ import type { Language } from './i18n/useI18n'
 type AppState =
   | { phase: 'boot' }
   | { phase: 'setup'; status: SetupStatus; modelConfig: ModelConfig }
-  | { phase: 'ready'; modelConfig: ModelConfig; activityState: 'idle' | 'thinking' | 'generating' }
+  | { phase: 'ready'; modelConfig: ModelConfig }
   | { phase: 'switching'; modelConfig: ModelConfig; toModelConfig: ModelConfig; status: SetupStatus }
 
 function AppContent() {
   const [state, setState] = useState<AppState>({ phase: 'boot' })
-  const [activityState, setActivityState] = useState<'idle' | 'thinking' | 'generating'>('idle')
-
-  const handleActivityChange = (newState: 'idle' | 'thinking' | 'generating') => {
-    setActivityState(newState)
-  }
 
   useEffect(() => {
     // Forward raw Gemma output to devtools console for debugging
@@ -32,17 +27,17 @@ function AppContent() {
           if (status.stage === 'ready') {
             // If we were switching, the new model is now ready
             if (prev.phase === 'switching') {
-              const nextState: AppState = { phase: 'ready', modelConfig: prev.toModelConfig, activityState: 'idle' }
+              const nextState: AppState = { phase: 'ready', modelConfig: prev.toModelConfig }
               return nextState
             }
             const defaultConfig: ModelConfig = { source: 'mlx', model: DEFAULT_MODEL }
-            const nextState: AppState = { phase: 'ready', modelConfig: prev.phase === 'setup' ? prev.modelConfig : defaultConfig, activityState: 'idle' }
+            const nextState: AppState = { phase: 'ready', modelConfig: prev.phase === 'setup' ? prev.modelConfig : defaultConfig }
             return nextState
           }
           if (status.stage === 'error') {
             // If switch failed, go back to the previous model
             if (prev.phase === 'switching') {
-              const nextState: AppState = { phase: 'ready', modelConfig: prev.modelConfig, activityState: 'idle' }
+              const nextState: AppState = { phase: 'ready', modelConfig: prev.modelConfig }
               return nextState
             }
           }
@@ -129,7 +124,7 @@ function AppContent() {
   if (state.phase === 'switching') {
     return (
       <div key="switching" className="anim-fade-in h-full w-full">
-        <Chat modelConfig={state.modelConfig} onSwitchModel={handleSwitchModel} onActivityChange={handleActivityChange} />
+        <Chat modelConfig={state.modelConfig} onSwitchModel={handleSwitchModel} />
         <SwitchingOverlay status={state.status} />
       </div>
     )
@@ -137,7 +132,7 @@ function AppContent() {
 
   return (
     <div key="chat" className="anim-fade-scale h-full w-full">
-      <Chat modelConfig={state.modelConfig} onSwitchModel={handleSwitchModel} onActivityChange={handleActivityChange} />
+      <Chat modelConfig={state.modelConfig} onSwitchModel={handleSwitchModel} />
     </div>
   )
 }
