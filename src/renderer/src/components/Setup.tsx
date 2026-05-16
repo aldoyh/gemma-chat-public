@@ -1,16 +1,17 @@
 import { useState } from 'react'
-import { AVAILABLE_MODELS, type SetupStatus } from '@shared/types'
+import { AVAILABLE_MODELS, type SetupStatus, type ModelConfig } from '@shared/types'
 import { useI18n } from '../i18n/useI18n'
 import LanguageSwitcher from './LanguageSwitcher'
 import gemmaLogoUrl from '../assets/gemma-logo.png'
 import AutoSelectNotification from './AutoSelectNotification'
 import FractalThinkingAnimation from './FractalThinkingAnimation'
+import ModelSourceSelector from './ModelSourceSelector'
 
 interface Props {
   status: SetupStatus
-  model: string
-  onModelChange: (m: string) => void
-  onStart: (model: string) => void
+  modelConfig: ModelConfig
+  onConfigChange: (config: ModelConfig) => void
+  onStart: (config: ModelConfig) => void
 }
 
 function formatBytes(n?: number): string {
@@ -25,7 +26,7 @@ function formatBytes(n?: number): string {
   return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`
 }
 
-export default function Setup({ status, model, onModelChange, onStart }: Props) {
+export default function Setup({ status, modelConfig, onConfigChange, onStart }: Props) {
   const { t, language } = useI18n()
   const isWorking =
     status.stage === 'checking' ||
@@ -34,7 +35,7 @@ export default function Setup({ status, model, onModelChange, onStart }: Props) 
     status.stage === 'downloading-model'
 
   if (status.stage === 'checking' && status.message === 'Welcome') {
-    return <WelcomeScreen model={model} onModelChange={onModelChange} onStart={onStart} />
+    return <WelcomeScreen modelConfig={modelConfig} onConfigChange={onConfigChange} onStart={onStart} />
   }
 
   return (
@@ -80,7 +81,7 @@ export default function Setup({ status, model, onModelChange, onStart }: Props) 
               <div className="font-medium">{t.setup.error}</div>
               <div className="mt-1 text-red-300/80">{status.error}</div>
               <button
-                onClick={() => onStart(model)}
+                onClick={() => onStart(modelConfig)}
                 className={`mt-3 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs hover:bg-white/10 ${language === 'ar' ? 'font-tajawal' : ''}`}
               >
                 {t.setup.tryAgain}
@@ -94,23 +95,23 @@ export default function Setup({ status, model, onModelChange, onStart }: Props) 
 }
 
 function WelcomeScreen({
-  model,
-  onModelChange,
+  modelConfig,
+  onConfigChange,
   onStart
 }: {
-  model: string
-  onModelChange: (m: string) => void
-  onStart: (model: string) => void
+  modelConfig: ModelConfig
+  onConfigChange: (config: ModelConfig) => void
+  onStart: (config: ModelConfig) => void
 }) {
   const { t, language } = useI18n()
-  const selected = AVAILABLE_MODELS.find((m) => m.name === model) ?? AVAILABLE_MODELS[1]
+  const selected = AVAILABLE_MODELS.find((m) => m.name === modelConfig.model) ?? AVAILABLE_MODELS[1]
   const [showNotification, setShowNotification] = useState(true)
 
   const handleAutoSelect = () => {
     setShowNotification(false)
     // Find recommended model (default to E4B if not found)
     const recommended = AVAILABLE_MODELS.find(m => m.recommended) ?? AVAILABLE_MODELS[1]
-    onStart(recommended.name)
+    onStart({ source: 'mlx', model: recommended.name })
   }
 
   const handleDismissNotification = () => {
@@ -146,49 +147,62 @@ function WelcomeScreen({
             </p>
           </div>
 
-          <div className={`mb-3 text-[11px] font-medium uppercase tracking-wider text-ink-400 ${language === 'ar' ? 'font-tajawal text-right' : ''}`}>
+          <ModelSourceSelector
+            modelConfig={modelConfig}
+            onConfigChange={(config) => {
+              onConfigChange(config)
+              setShowNotification(false)
+            }}
+            disabled={false}
+          />
+
+          <div className={`mt-6 mb-3 text-[11px] font-medium uppercase tracking-wider text-ink-400 ${language === 'ar' ? 'font-tajawal text-right' : ''}`}>
             {t.setup.pickModel}
           </div>
-          <div className="anim-stagger space-y-2">
-            {AVAILABLE_MODELS.map((m) => (
-              <button
-                key={m.name}
-                onClick={() => {
-                  onModelChange(m.name)
-                  setShowNotification(false)
-                }}
-                className={`anim-fade-up group relative w-full rounded-xl border px-4 py-3 text-left transition active:scale-[0.99] ${
-                  model === m.name
-                    ? 'border-white/25 bg-white/[0.06]'
-                    : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{m.label}</span>
-                    {m.recommended && (
-                      <span className="rounded-full bg-white/10 px-2 py-[1px] text-[10px] font-medium uppercase tracking-wider text-ink-100">
-                        Recommended
-                      </span>
-                    )}
+          {modelConfig.source === 'mlx' && (
+            <div className="anim-stagger space-y-2">
+              {AVAILABLE_MODELS.map((m) => (
+                <button
+                  key={m.name}
+                  onClick={() => {
+                    onConfigChange({ source: 'mlx', model: m.name })
+                    setShowNotification(false)
+                  }}
+                  className={`anim-fade-up group relative w-full rounded-xl border px-4 py-3 text-left transition active:scale-[0.99] ${
+                    modelConfig.model === m.name
+                      ? 'border-white/25 bg-white/[0.06]'
+                      : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{m.label}</span>
+                      {m.recommended && (
+                        <span className="rounded-full bg-white/10 px-2 py-[1px] text-[10px] font-medium uppercase tracking-wider text-ink-100">
+                          Recommended
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs tabular-nums text-ink-400">{m.size}</span>
                   </div>
-                  <span className="text-xs tabular-nums text-ink-400">{m.size}</span>
-                </div>
-                <div className="mt-1 text-[12.5px] leading-snug text-ink-400">
-                  {m.description}
-                </div>
-              </button>
-            ))}
-          </div>
+                  <div className="mt-1 text-[12.5px] leading-snug text-ink-400">
+                    {m.description}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
 
           <button
             onClick={() => {
               setShowNotification(false)
-              onStart(selected.name)
+              onStart(modelConfig)
             }}
             className={`mt-6 w-full rounded-xl bg-white py-3 text-sm font-medium text-ink-900 transition hover:bg-white/90 active:scale-[0.99] ${language === 'ar' ? 'font-tajawal' : ''}`}
           >
-            {t.setup.download} {selected.label} &nbsp;·&nbsp; {selected.size}
+            {modelConfig.source === 'gguf'
+              ? `${t.setup.download} from Local File`
+              : `${t.setup.download} ${selected.label} &nbsp;·&nbsp; ${selected.size}`}
           </button>
           <p className={`mt-3 text-center text-[11px] text-ink-400 ${language === 'ar' ? 'font-tajawal' : ''}`}>
             {t.setup.installNote}
