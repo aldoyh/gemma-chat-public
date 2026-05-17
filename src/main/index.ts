@@ -2,7 +2,7 @@ import { app, shell, BrowserWindow, ipcMain, nativeTheme, session, nativeImage }
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { cpus, loadavg } from 'os'
-import { AVAILABLE_MODELS } from '@shared/types'
+import { AVAILABLE_MODELS, DEFAULT_MODEL } from '@shared/types'
 import {
   switchBackend,
   getCurrentBackend,
@@ -10,6 +10,7 @@ import {
   shutdownBackend,
   type InferenceBackend
 } from './inference'
+import { ensureCleanFirstRunModelState } from './mlx'
 import {
   TOOLS,
   chatSystemPrompt,
@@ -89,11 +90,30 @@ function getCPULoad(): number {
 
 async function ensureBackendRunning(modelConfig: ModelConfig): Promise<InferenceBackend> {
   const backend = getCurrentBackend()
-
-  // If backend already running with same config, return it
   const backendType = getCurrentBackendType()
   const targetType = modelConfig.source === 'mlx' ? 'mlx' : 'gguf'
+
+  const onProgress = (p: {
+    message: string
+    progress?: number
+    remainingSeconds?: number
+    totalSeconds?: number
+  }) => {
+    send('setup:status', {
+      stage: targetType === 'mlx' ? 'starting-mlx' : 'downloading-model',
+      message: p.message,
+      progress: p.progress,
+      remainingSeconds: p.remainingSeconds
+    })
+  }
+
+  // If backend already running with same config, ensure model is loaded
   if (backend && backendType === targetType) {
+    if (targetType === 'mlx' && modelConfig.model) {
+      await backend.loadModel(modelConfig.model, onProgress)
+    } else if (targetType === 'gguf' && modelConfig.path) {
+      await backend.loadModel(modelConfig.path, onProgress)
+    }
     return backend
   }
 
@@ -105,18 +125,36 @@ async function ensureBackendRunning(modelConfig: ModelConfig): Promise<Inference
 
   try {
     if (modelConfig.source === 'mlx') {
-      // MLX path: check/install Python, install MLX, download model
+      await ensureCleanFirstRunModelState((message) => {
+        send('setup:status', {
+          stage: 'checking',
+          message
+        })
+      })
+
+      // 1. Initialize backend
       await switchBackend('mlx')
       const mlxBackend = getCurrentBackend()
       if (!mlxBackend) throw new Error('Failed to initialize MLX backend')
 
-      send('setup:status', {
-        stage: 'starting-mlx',
-        message: 'Starting model runtime…'
-      })
+      // 2. Check installation
+      const status = await mlxBackend.getStatus()
+      if (!status.installed) {
+        send('setup:status', {
+          stage: 'installing-mlx',
+          message: 'Installing MLX runtime…'
+        })
+        await mlxBackend.install((p) => {
+          send('setup:status', {
+            stage: 'installing-mlx',
+            message: p.message
+          })
+        })
+      }
 
-      const modelName = modelConfig.model || 'mlx-community/gemma-4-e4b-it-4bit'
-      await mlxBackend.loadModel(modelName)
+      // 3. Load model
+      const modelName = modelConfig.model || DEFAULT_MODEL
+      await mlxBackend.loadModel(modelName, onProgress)
 
       return mlxBackend
     } else if (modelConfig.source === 'gguf') {
@@ -125,14 +163,11 @@ async function ensureBackendRunning(modelConfig: ModelConfig): Promise<Inference
         throw new Error('GGUF path required for local model source')
       }
 
-      send('setup:status', {
-        stage: 'downloading-model',
-        message: `Loading local model: ${modelConfig.path}…`
-      })
-
       await switchBackend('gguf', { modelPath: modelConfig.path })
       const ggufBackend = getCurrentBackend()
       if (!ggufBackend) throw new Error('Failed to initialize GGUF backend')
+
+      await ggufBackend.loadModel(modelConfig.path, onProgress)
 
       return ggufBackend
     } else {
@@ -519,21 +554,7 @@ app.whenReady().then(async () => {
     })
 
     try {
-      if (modelConfig.source === 'mlx') {
-        // MLX path: switch backend, then load model
-        await switchBackend('mlx')
-        const backend = getCurrentBackend()
-        if (backend && modelConfig.model) {
-          await backend.loadModel(modelConfig.model)
-        }
-      } else {
-        // GGUF path: switch backend with model path
-        if (!modelConfig.path) {
-          throw new Error('GGUF path required for local model source')
-        }
-        await switchBackend('gguf', { modelPath: modelConfig.path })
-      }
-
+      await ensureBackendRunning(modelConfig)
       send('setup:status', { stage: 'ready', message: 'Ready to chat.' })
     } catch (e) {
       send('setup:status', {

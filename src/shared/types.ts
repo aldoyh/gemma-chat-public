@@ -12,6 +12,7 @@ export interface SetupStatus {
   progress?: number
   bytesDone?: number
   bytesTotal?: number
+  remainingSeconds?: number
   error?: string
 }
 
@@ -90,6 +91,14 @@ export interface ModelInfo {
 
 export const AVAILABLE_MODELS: ModelInfo[] = [
   {
+    name: 'mlx-community/gemma-2-2b-it-4bit',
+    label: 'Gemma 2 2B',
+    size: '1.5 GB',
+    sizeBytes: 1_500_000_000,
+    description: 'Ultra-reliable. Fast & lightweight. Excellent fallback for all Macs.',
+    recommended: false
+  },
+  {
     name: 'mlx-community/gemma-4-e2b-it-4bit',
     label: 'Gemma 4 E2B',
     size: '1.5 GB',
@@ -120,7 +129,7 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
   }
 ]
 
-export const DEFAULT_MODEL = 'mlx-community/gemma-4-e4b-it-4bit'
+export const DEFAULT_MODEL = 'mlx-community/gemma-2-2b-it-4bit'
 
 export type ActivityState = 'idle' | 'thinking' | 'generating' | 'loading'
 
@@ -130,7 +139,7 @@ export interface SystemMetrics {
   timestamp: number
 }
 
-export type ModelSource = 'mlx' | 'local'
+export type ModelSource = 'mlx' | 'gguf'
 
 export interface ModelConfig {
   source: ModelSource

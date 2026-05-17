@@ -1,5 +1,6 @@
 import {
   locateMLX,
+  installMLX,
   startServer,
   stopServer,
   listLocalModels,
@@ -13,13 +14,15 @@ export class MLXBackend implements InferenceBackend {
 
   async initialize(): Promise<void> {
     const status = await this.getStatus()
-    if (!status.available || !status.installed) {
+    if (!status.available) {
       throw new Error('MLX initialization failed: ' + status.message)
     }
+    // We allow initialization even if not installed yet,
+    // so that we can call install() later.
   }
 
   async shutdown(): Promise<void> {
-    stopServer()
+    await stopServer()
   }
 
   async getStatus(): Promise<BackendStatus> {
@@ -47,7 +50,24 @@ export class MLXBackend implements InferenceBackend {
     }
   }
 
-  async loadModel(modelName: string): Promise<void> {
+  async install(onProgress: (progress: { stage: string; message: string }) => void): Promise<void> {
+    await installMLX((p) => {
+      onProgress({
+        stage: 'installing-mlx',
+        message: p.message
+      })
+    })
+  }
+
+  async loadModel(
+    modelName: string,
+    onProgress?: (progress: {
+      message: string
+      progress?: number
+      remainingSeconds?: number
+      totalSeconds?: number
+    }) => void
+  ): Promise<void> {
     if (this.currentModel === modelName) return
 
     // Ensure MLX is installed
@@ -64,8 +84,14 @@ export class MLXBackend implements InferenceBackend {
 
     // Start server with the model
     await startServer(this.mlxPython, modelName, (progress) => {
-      // Progress callback — caller can implement
-      console.log('[mlx-backend]', progress.message)
+      if (onProgress) {
+        onProgress({
+          message: progress.message,
+          progress: progress.progress,
+          remainingSeconds: progress.remainingSeconds,
+          totalSeconds: progress.totalSeconds
+        })
+      }
     })
 
     this.currentModel = modelName

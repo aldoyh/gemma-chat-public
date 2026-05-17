@@ -3,7 +3,6 @@ import { DEFAULT_MODEL, type SetupStatus, type ModelConfig } from '@shared/types
 import Setup from './components/Setup'
 import Chat from './components/Chat'
 import { I18nProvider } from './i18n/useI18n'
-import type { Language } from './i18n/useI18n'
 
 type AppState =
   | { phase: 'boot' }

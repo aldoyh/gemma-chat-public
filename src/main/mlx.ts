@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { spawn, ChildProcess, spawnSync } from 'child_process'
 import { join } from 'path'
-import { existsSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { AVAILABLE_MODELS } from '../shared/types'
 
 export const MLX_PORT = 11435
@@ -30,6 +30,10 @@ function venvPython(): string {
 
 function modelsDir(): string {
   return join(dataDir(), 'models')
+}
+
+function firstRunResetMarkerPath(): string {
+  return join(dataDir(), '.first-run-model-reset-v1')
 }
 
 // ---------------------------------------------------------------------------
@@ -70,17 +74,22 @@ function findSystemPython(): string | null {
     }
   }
 
-  // Last resort: try generic python3 but verify it's not 3.14+
-  const fallbacks = ['/opt/homebrew/bin/python3', '/usr/local/bin/python3', '/usr/bin/python3']
+  // Last resort: try generic python3/python but verify it's not 3.14+
+  const fallbacks = ['python3', 'python', '/opt/homebrew/bin/python3', '/usr/local/bin/python3', '/usr/bin/python3']
   for (const c of fallbacks) {
     try {
       const s = spawnSync(c, ['--version'], { timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'] })
       if (s.status === 0) {
-        const ver = s.stdout.toString().trim() // e.g. "Python 3.13.2"
+        const ver = s.stdout.toString().trim() || s.stderr.toString().trim() // e.g. "Python 3.13.2"
         const match = ver.match(/Python 3\.(\d+)/)
         const minor = match ? parseInt(match[1], 10) : 99
         if (minor >= 10 && minor <= 13) {
-          console.log(`[mlx] Found compatible Python: ${c} (${ver})`)
+          console.log(`[mlx] Found compatible Python via ${c}: ${ver}`)
+          // If it was an unqualified command, we should try to get its full path
+          if (!c.startsWith('/')) {
+            const which = spawnSync('which', [c], { stdio: ['ignore', 'pipe', 'ignore'] })
+            if (which.status === 0) return which.stdout.toString().trim()
+          }
           return c
         } else if (minor < 10) {
           console.log(`[mlx] Skipping ${c} — ${ver} is too old (need 3.10+)`)
@@ -166,6 +175,35 @@ export function locateMLX(): MLXStatus | null {
 export type InstallProgress = {
   stage: 'download' | 'install'
   message: string
+}
+
+/**
+ * On first launch only, wipe cached model files so setup always starts clean.
+ * This avoids stale/corrupted downloads carrying over from previous builds.
+ */
+export async function ensureCleanFirstRunModelState(
+  onProgress?: (message: string) => void
+): Promise<boolean> {
+  const marker = firstRunResetMarkerPath()
+  if (existsSync(marker)) return false
+
+  onProgress?.('First launch detected. Resetting local model cache…')
+
+  await stopServer()
+
+  try {
+    rmSync(modelsDir(), { recursive: true, force: true })
+    mkdirSync(dataDir(), { recursive: true })
+    writeFileSync(
+      marker,
+      JSON.stringify({ cleanedAt: new Date().toISOString(), version: 1 }) + '\n',
+      'utf8'
+    )
+    console.log('[mlx] First-run model reset complete')
+    return true
+  } catch (e) {
+    throw new Error(`Failed to reset first-run model cache: ${(e as Error).message}`)
+  }
 }
 
 /**
@@ -274,12 +312,20 @@ export interface ServerProgress {
 export async function startServer(
   python: string,
   model: string,
-  onProgress?: (p: ServerProgress) => void
+  onProgress?: (p: ServerProgress) => void,
+  skipPostLoadRepair = false
 ): Promise<void> {
   if (serverProc && !serverProc.killed && currentModel === model) return
 
   // Kill existing server if running with different model
-  stopServer()
+  await stopServer()
+
+  // Apply known model fixes BEFORE spawning
+  try {
+    await repairModelConfig(model)
+  } catch (e) {
+    console.warn('[mlx] Model repair failed (non-critical):', (e as Error).message)
+  }
 
   const env = {
     ...process.env,
@@ -299,17 +345,16 @@ export async function startServer(
 
   // Metrics for progress tracking
   let downloadStartTime = 0
-  let lastBytesDownloaded = 0
   let downloadCompleteTime = 0
 
   // Estimate model loading time based on size (rough: ~60MB/s on Apple Silicon)
   const estimatedLoadTimeSeconds = Math.ceil(modelSizeBytes / 60_000_000)
 
-  console.log(`[mlx] Starting server: ${python} -m mlx_lm.server --model ${model} --port ${MLX_PORT}`)
+  console.log(`[mlx] Starting server: ${python} -m mlx_lm server --model ${model} --port ${MLX_PORT}`)
 
   serverProc = spawn(
     python,
-    ['-m', 'mlx_lm.server', '--model', model, '--port', String(MLX_PORT)],
+    ['-m', 'mlx_lm', 'server', '--model', model, '--port', String(MLX_PORT)],
     {
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -325,30 +370,22 @@ export async function startServer(
     console.log('[mlx]', text.trim())
 
     // Parse HuggingFace download progress from stderr
-    // Progress bars use \r for updates: "Fetching 8 files:  50%|█████     | 4/8 [00:55<00:59, 14.98s/it]"
     if (onProgress) {
-      // Split on both newlines and carriage returns to capture progress updates
       const lines = text.split(/[\r\n]+/).filter(l => l.length > 0)
       for (const line of lines) {
-        // Match "Fetching N files: XX%" pattern with ETA info
-        // Format: "Fetching 8 files: 50%|█████     | 4/8 [00:55<00:59, 14.98s/it]"
         const fetchMatch = line.match(/Fetching\s+(\d+)\s+files?:\s+(\d+)%.*?(\d+)\/(\d+)\s*\[([^\]<]+)<([^\]]+)/)
         if (fetchMatch) {
           const pct = parseInt(fetchMatch[2], 10)
           const done = parseInt(fetchMatch[3], 10)
           const total = parseInt(fetchMatch[4], 10)
-          const elapsedStr = fetchMatch[5] // "00:55"
           const remainingStr = fetchMatch[6] // "00:59"
 
           if (!downloadStartTime) downloadStartTime = Date.now()
 
-          // Parse elapsed and remaining times
-          const elapsedMatch = elapsedStr.match(/(\d+):(\d+)/)
           const remainingMatch = remainingStr.match(/(\d+):(\d+)/)
           const remainingDownloadSeconds = remainingMatch ?
             parseInt(remainingMatch[1]) * 60 + parseInt(remainingMatch[2]) : 0
 
-          // When download reaches 100%, record completion time and calculate load estimate
           if (pct === 100) {
             if (!downloadCompleteTime) downloadCompleteTime = Date.now()
             const totalLoadTime = estimatedLoadTimeSeconds
@@ -363,7 +400,7 @@ export async function startServer(
             const estimatedTotalSeconds = (Date.now() - downloadStartTime) / 1000 + remainingDownloadSeconds + totalLoadTime
             onProgress({
               message: `Downloading model files… ${done}/${total}`,
-              progress: (pct / 100) * 0.5, // Download is first 50% of overall progress
+              progress: (pct / 100) * 0.5,
               remainingSeconds: remainingDownloadSeconds + totalLoadTime,
               totalSeconds: estimatedTotalSeconds
             })
@@ -371,13 +408,13 @@ export async function startServer(
           continue
         }
 
-        // Match loading messages
         if (line.includes('Starting httpd') || line.includes('starting')) {
           onProgress({ message: 'Starting server…', progress: 1.0 })
         }
       }
     }
   })
+  
   serverProc.on('exit', (code) => {
     console.log('[mlx] server exited with code', code)
     earlyExit = { code, stderr: stderrBuf }
@@ -389,36 +426,135 @@ export async function startServer(
   // First run downloads model weights from HuggingFace, so allow up to 10 min.
   await waitForHealth(600_000, () => earlyExit, onProgress, {
     modelSize: modelSizeBytes,
-    estimatedLoadTime: estimatedLoadTimeSeconds
+    estimatedLoadTime: estimatedLoadTimeSeconds,
+    getStderr: () => stderrBuf
   })
-}
 
-export function stopServer(): void {
-  if (serverProc && !serverProc.killed) {
-    console.log('[mlx] Stopping server')
-    serverProc.kill('SIGTERM')
-    serverProc = null
-    currentModel = null
+  // On a true first download, model files did not exist before spawn, so
+  // pre-spawn repair cannot patch them yet. Repair now and restart once.
+  if (!skipPostLoadRepair) {
+    try {
+      const changed = await repairModelConfig(model)
+      if (changed) {
+        console.log('[mlx] Post-download model repair applied; restarting server to load patched config')
+        onProgress?.({
+          message: 'Applying compatibility fix and restarting model runtime…',
+          progress: 0.98
+        })
+        await stopServer()
+        await startServer(python, model, onProgress, true)
+      }
+    } catch (e) {
+      console.warn('[mlx] Post-download model repair failed (non-critical):', (e as Error).message)
+    }
   }
 }
 
 /**
+ * Apply known fixes to model config.json files.
+ * Some Gemma 4 models on HF have architecture mismatches (KV sharing).
+ */
+async function repairModelConfig(modelName: string): Promise<boolean> {
+  const repoDir = join(modelsDir(), 'hub', `models--${modelName.replace(/\//g, '--')}`)
+  if (!existsSync(repoDir)) return false
+
+  // Find config.json in snapshots
+  const snapshotsDir = join(repoDir, 'snapshots')
+  if (!existsSync(snapshotsDir)) return false
+
+  const { readdir, readFile, writeFile } = await import('fs/promises')
+  const snapshots = await readdir(snapshotsDir)
+  let changedAny = false
+  
+  for (const s of snapshots) {
+    const configPath = join(snapshotsDir, s, 'config.json')
+    if (existsSync(configPath)) {
+      try {
+        const content = JSON.parse(await readFile(configPath, 'utf8'))
+        let changed = false
+
+        // Fix for Gemma 4 KV sharing mismatch
+        if (content.model_type === 'gemma4' && content.text_config?.num_kv_shared_layers > 0) {
+          console.log(`[mlx] Repairing KV sharing mismatch for ${modelName}`)
+          content.text_config.num_kv_shared_layers = 0
+          changed = true
+        }
+        if (content.model_type === 'gemma4' && typeof content.num_kv_shared_layers === 'number' && content.num_kv_shared_layers > 0) {
+          console.log(`[mlx] Repairing root KV sharing mismatch for ${modelName}`)
+          content.num_kv_shared_layers = 0
+          changed = true
+        }
+
+        if (changed) {
+          await writeFile(configPath, JSON.stringify(content, null, 4))
+          console.log(`[mlx] Successfully repaired ${modelName} config`)
+          changedAny = true
+        }
+      } catch (e) {
+        console.warn(`[mlx] Failed to check/repair config for ${modelName}:`, (e as Error).message)
+      }
+    }
+  }
+  return changedAny
+}
+
+/**
+ * Stop the current MLX server process and wait for it to exit.
+ * Uses SIGTERM initially, falls back to SIGKILL if it doesn't exit within 3s.
+ */
+export async function stopServer(): Promise<void> {
+  if (!serverProc || serverProc.killed) {
+    serverProc = null
+    currentModel = null
+    return
+  }
+
+  console.log('[mlx] Stopping server process')
+  const proc = serverProc
+  serverProc = null
+  currentModel = null
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      console.log('[mlx] Server did not exit in time, force killing…')
+      try { proc.kill('SIGKILL') } catch { /* ok */ }
+      resolve()
+    }, 3000)
+
+    proc.on('exit', () => {
+      clearTimeout(timeout)
+      console.log('[mlx] Server process exited cleanly')
+      resolve()
+    })
+
+    try { proc.kill('SIGTERM') } catch {
+      clearTimeout(timeout)
+      resolve()
+    }
+  })
+}
+
+/**
  * Poll the server's /v1/models endpoint until the requested model is loaded.
- * If the server process exits early, throw immediately.
+ * If the server process exits early or logs a fatal error, throw immediately.
  */
 async function waitForHealth(
   timeoutMs: number,
   checkEarlyExit: () => { code: number | null; stderr: string } | null,
   onProgress?: (p: ServerProgress) => void,
-  estimateInfo?: { modelSize: number; estimatedLoadTime: number }
+  estimateInfo?: { modelSize: number; estimatedLoadTime: number; getStderr: () => string }
 ): Promise<void> {
   const start = Date.now()
   let lastError: unknown = null
   let lastProgressSend = 0
   const estimatedLoadSeconds = estimateInfo?.estimatedLoadTime ?? 60
+  
+  // We need to wait at least a few seconds for the model to actually load into memory,
+  // even if it appears in the /v1/models list (which scans the cache directory immediately).
+  const minLoadTimeMs = 5000 
 
   while (Date.now() - start < timeoutMs) {
-    // Check if the server process crashed
+    // 1. Check if the server process crashed
     const exit = checkEarlyExit()
     if (exit) {
       throw new Error(
@@ -426,26 +562,44 @@ async function waitForHealth(
       )
     }
 
+    // 2. Check for fatal errors in stderr without exiting
+    const stderr = estimateInfo?.getStderr() || ''
+    if (stderr.includes('OutOfMemoryError') || stderr.includes('MemoryError')) {
+      await stopServer()
+      throw new Error('MLX server ran out of memory while loading the model. Try a smaller model variant.')
+    }
+    if (stderr.includes('Error: model not found') || stderr.includes('FileNotFoundError')) {
+      await stopServer()
+      throw new Error('MLX server could not find the model files. Try deleting the model folder and downloading again.')
+    }
+
+    // 3. Poll the models endpoint
     try {
       const res = await fetch(`${MLX_URL}/v1/models`)
       if (res.ok) {
         const data = (await res.json()) as { data?: Array<{ id: string }> }
         const models = (data.data ?? []).map((m) => m.id)
-        // Check if the current model is in the loaded models
-        if (currentModel && models.some((m) => m === currentModel || m.startsWith(currentModel + ':'))) {
+        
+        // Check if the current model is in the list
+        const found = currentModel && models.some((m) => m === currentModel || m.startsWith(currentModel + ':'))
+        
+        // Only consider it healthy if it's found AND we've waited at least minLoadTimeMs
+        // OR if the server is already responding to chat requests (not checked here for simplicity)
+        if (found && (Date.now() - start > minLoadTimeMs)) {
           console.log('[mlx] Server is healthy, model loaded')
           return
         }
-        // Server is up but model not loaded yet - send progress update with time estimates
+
+        // Server is up but model not ready yet - send progress update
         const now = Date.now()
         if (now - lastProgressSend > 1000) {
           const elapsedSec = Math.round((now - start) / 1000)
           const remainingSec = Math.max(0, estimatedLoadSeconds - elapsedSec)
-          console.log('[mlx] Server running, waiting for model to load...', { loaded: models, waiting: currentModel, elapsedSec, remainingSec })
+          
           if (onProgress) {
             onProgress({
               message: `Loading model into memory… (${remainingSec}s remaining)`,
-              progress: 0.5 + (elapsedSec / estimatedLoadSeconds) * 0.45, // 50% to 95% as loading progresses
+              progress: 0.5 + (elapsedSec / estimatedLoadSeconds) * 0.45,
               remainingSeconds: remainingSec,
               totalSeconds: elapsedSec + estimatedLoadSeconds
             })
@@ -458,7 +612,7 @@ async function waitForHealth(
     }
     await new Promise((r) => setTimeout(r, 1000))
   }
-  throw new Error(`MLX server did not load model within ${timeoutMs / 1000}s: ${String(lastError)}`)
+  throw new Error(`MLX server did not become healthy within ${timeoutMs / 1000}s: ${String(lastError)}`)
 }
 
 // ---------------------------------------------------------------------------

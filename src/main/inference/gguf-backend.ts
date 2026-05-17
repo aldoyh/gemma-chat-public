@@ -1,12 +1,12 @@
-import { getLlama, type Llama } from 'node-llama-cpp'
+import { getLlama, type Llama, type LlamaModel, type LlamaContext, LlamaChatSession } from 'node-llama-cpp'
 import path from 'path'
 import { existsSync } from 'fs'
 import type { InferenceBackend, BackendStatus, ChatStreamOptions, BackendStreamChunk } from './base'
 
 interface LoadedModel {
   llama: Llama
-  model: any // The loaded model instance
-  context: any // The inference context
+  model: LlamaModel
+  context: LlamaContext
   modelPath: string
 }
 
@@ -15,7 +15,6 @@ export class GGUFBackend implements InferenceBackend {
   private modelPath: string | null = null
 
   async initialize(): Promise<void> {
-    // GGUF backend initialization - mostly just prepares getLlama
     try {
       await getLlama()
     } catch (e) {
@@ -26,28 +25,19 @@ export class GGUFBackend implements InferenceBackend {
   async shutdown(): Promise<void> {
     if (this.loadedModel) {
       try {
-        // Dispose context first
         if (this.loadedModel.context) {
-          this.loadedModel.context.dispose()
+          await this.loadedModel.context.dispose()
         }
       } catch (e) {
         console.error('[gguf-backend] Error disposing context:', e)
       }
 
       try {
-        // Dispose model
         if (this.loadedModel.model) {
-          this.loadedModel.model.dispose()
+          await this.loadedModel.model.dispose()
         }
       } catch (e) {
         console.error('[gguf-backend] Error disposing model:', e)
-      }
-
-      try {
-        // Dispose Llama instance
-        await this.loadedModel.llama.dispose()
-      } catch (e) {
-        console.error('[gguf-backend] Error disposing Llama:', e)
       }
 
       this.loadedModel = null
@@ -67,39 +57,43 @@ export class GGUFBackend implements InferenceBackend {
     return this.loadedModel !== null
   }
 
-  async loadModel(modelPath: string): Promise<void> {
-    // Verify file exists
+  async install(_onProgress: (progress: { stage: string; message: string }) => void): Promise<void> {
+    // GGUF backend uses node-llama-cpp which is installed via npm
+    return
+  }
+
+  async loadModel(
+    modelPath: string,
+    _onProgress?: (progress: {
+      message: string
+      progress?: number
+      remainingSeconds?: number
+      totalSeconds?: number
+    }) => void
+  ): Promise<void> {
     const fullPath = path.resolve(modelPath)
     if (!existsSync(fullPath)) {
       throw new Error(`Model file not found: ${fullPath}`)
     }
 
-    // Shutdown previous model if different path
     if (this.loadedModel && this.loadedModel.modelPath !== fullPath) {
       await this.shutdown()
     }
 
     if (this.loadedModel && this.loadedModel.modelPath === fullPath) {
-      return // Already loaded
+      return
     }
 
     try {
       console.log(`[gguf-backend] Loading model from ${fullPath}`)
 
-      const llama = await getLlama({
-        gpu: 'auto'
-      })
+      const llama = await getLlama()
 
-      // Load the model once and keep it in memory
       const model = await llama.loadModel({
         modelPath: fullPath
       })
 
-      // Create a persistent context for inference
-      const context = await model.createContext({
-        sequences: 1,
-        threads: 4
-      })
+      const context = await model.createContext()
 
       this.loadedModel = {
         llama,
@@ -116,8 +110,6 @@ export class GGUFBackend implements InferenceBackend {
   }
 
   async listModels(): Promise<string[]> {
-    // GGUF backend doesn't auto-discover models
-    // Return the currently loaded model if available
     return this.modelPath ? [this.modelPath] : []
   }
 
@@ -130,37 +122,39 @@ export class GGUFBackend implements InferenceBackend {
       throw new Error('No model loaded. Call loadModel() first.')
     }
 
-    const { model, context } = this.loadedModel
-
-    // Build messages in chat format
-    const messages = opts.messages.map(m => `${m.role}: ${m.content}`).join('\n') + '\nassistant:'
+    const { context } = this.loadedModel
 
     try {
-      // Get a sequence for generation
-      const sequence = context.getSequence()
+      const session = new LlamaChatSession({
+        contextSequence: context.getSequence(),
+        autoDisposeSequence: true
+      })
 
-      // Tokenize the messages
-      const tokens = model.tokenize(messages)
+      // Convert messages to node-llama-cpp format
+      // Note: LlamaChatSession manages the history, but here we provide the whole context
+      // as it's a stateless call from the perspective of this backend method.
+      const history = opts.messages.map(m => ({
+        role: m.role as 'user' | 'assistant' | 'system',
+        content: m.content
+      }))
 
-      // Generate response
-      for await (const token of sequence.evaluate(tokens, {
-        temperature: opts.temperature ?? 0.7
-      })) {
-        // Check for abort signal
-        if (opts.signal?.aborted) {
-          break
-        }
+      // The last message is usually the user prompt if we want to use session.prompt()
+      // or we can set the history and call prompt() with the last message.
+      const lastMessage = history[history.length - 1]
+      const previousHistory = history.slice(0, -1)
 
-        const text = model.detokenize([token])
-        if (text) {
-          yield { content: text }
-        }
+      session.setChatHistory(previousHistory)
+
+      const iterator = await session.promptWithStream(lastMessage.content, {
+        temperature: opts.temperature ?? 0.7,
+        signal: opts.signal
+      })
+
+      for await (const chunk of iterator) {
+        yield { content: chunk }
       }
 
       yield { done: true }
-
-      // Cleanup only the sequence, not the context (reuse it)
-      sequence.dispose()
     } catch (e) {
       if ((e as Error).name === 'AbortError') {
         yield { done: true }
@@ -170,3 +164,4 @@ export class GGUFBackend implements InferenceBackend {
     }
   }
 }
+

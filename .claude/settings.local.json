@@ -25,7 +25,8 @@
       "Bash(pkill -f \"mlx_lm.server\")",
       "Bash(rm -f /tmp/debug.log)",
       "Bash(pkill -9 -f \"npm run dev\")",
-      "Bash(pkill -9 -f \"mlx_lm\")"
+      "Bash(pkill -9 -f \"mlx_lm\")",
+      "Skill(superpowers:writing-plans)"
     ]
   }
 }

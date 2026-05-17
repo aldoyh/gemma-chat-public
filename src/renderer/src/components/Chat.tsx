@@ -10,7 +10,7 @@ import ActivityIndicator from './ActivityIndicator'
 interface Props {
   modelConfig: ModelConfig
   onSwitchModel: (config: ModelConfig) => void
-  onActivityChange?: (state: 'idle' | 'thinking' | 'generating') => void
+  onActivityChange?: (state: ActivityState) => void
 }
 
 interface Conversation {
@@ -66,7 +66,7 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
   const [activeId, setActiveId] = useState<string>(() => conversations[0].id)
   const [streaming, setStreaming] = useState(false)
   const [activityState, setActivityState] = useState<ActivityState>('idle')
-  const [cpuPercent, setCPUPercent] = useState(0)
+  const [cpuPercent] = useState(0)
   const streamRef = useRef<{ abort: boolean }>({ abort: false })
 
   // Extract model name for API calls (use model name for MLX, path for GGUF)

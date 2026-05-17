@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, type ReactElement } from 'react'
 import { useI18n } from '../i18n/useI18n'
 import type { ModelConfig } from '@shared/types'
-import { AVAILABLE_MODELS } from '@shared/types'
+import { AVAILABLE_MODELS, DEFAULT_MODEL } from '@shared/types'
 
 interface Props {
   modelConfig: ModelConfig
@@ -13,7 +13,7 @@ export default function ModelSourceSelector({
   modelConfig,
   onConfigChange,
   disabled = false
-}: Props): JSX.Element {
+}: Props): ReactElement {
   const { t, language } = useI18n()
   const [ggufPath, setGgufPath] = useState(modelConfig.path || '')
 
@@ -41,7 +41,7 @@ export default function ModelSourceSelector({
 
         {/* MLX (Download) Option */}
         <button
-          onClick={() => onConfigChange({ source: 'mlx', model: modelConfig.model || 'mlx-community/gemma-4-e4b-it-4bit' })}
+          onClick={() => onConfigChange({ source: 'mlx', model: modelConfig.model || DEFAULT_MODEL })}
           disabled={disabled}
           className={`w-full text-left rounded-lg border-2 p-3 transition ${
             modelConfig.source === 'mlx'
@@ -56,7 +56,7 @@ export default function ModelSourceSelector({
         {/* MLX Model Selector */}
         {modelConfig.source === 'mlx' && (
           <select
-            value={modelConfig.model || 'mlx-community/gemma-4-e4b-it-4bit'}
+            value={modelConfig.model || DEFAULT_MODEL}
             onChange={(e) => onConfigChange({ source: 'mlx', model: e.target.value })}
             disabled={disabled}
             className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"

@@ -214,7 +214,7 @@ function WelcomeScreen({
 }
 
 function StageList({ status }: { status: SetupStatus }) {
-  const { t, language } = useI18n()
+  const { t } = useI18n()
   const stages: Array<{ key: SetupStatus['stage']; label: string }> = [
     { key: 'installing-mlx', label: t.setup.stages.installing },
     { key: 'starting-mlx', label: t.setup.stages.starting },

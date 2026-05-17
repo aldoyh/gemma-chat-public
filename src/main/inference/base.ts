@@ -27,6 +27,7 @@ export interface InferenceBackend {
   // Status
   getStatus(): Promise<BackendStatus>
   isReady(): Promise<boolean>
+  install(onProgress: (progress: { stage: string; message: string }) => void): Promise<void>
 
   // Chat
   chat(opts: ChatStreamOptions): AsyncGenerator<BackendStreamChunk>
@@ -34,5 +35,13 @@ export interface InferenceBackend {
   // Model management
   listModels(): Promise<string[]>
   hasModel(name: string): Promise<boolean>
-  loadModel(modelPath: string): Promise<void>
+  loadModel(
+    modelPath: string,
+    onProgress?: (progress: {
+      message: string
+      progress?: number
+      remainingSeconds?: number
+      totalSeconds?: number
+    }) => void
+  ): Promise<void>
 }

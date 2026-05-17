@@ -1,4 +1,4 @@
-import { useI18n, type Language } from '../i18n/useI18n'
+import { useI18n } from '../i18n/useI18n'
 
 export default function LanguageSwitcher() {
   const { language, setLanguage } = useI18n()

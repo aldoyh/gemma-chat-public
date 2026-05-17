@@ -130,7 +130,7 @@ function drawFractal(
 }
 
 function drawMorphingShape(
-  svg: SVGSVGElement,
+  _svg: SVGSVGElement,
   x: number,
   y: number,
   size: number,

@@ -44,8 +44,9 @@ Everything happens locally. The model runs via [MLX-LM](https://github.com/ml-ex
 
 | Model | Size | Best For |
 |---|---|---|
+| **Gemma 2 2B** | **~1.5 GB** | **Stable & Reliable.** Best fallback. |
 | Gemma 4 E2B | ~1.5 GB | Fast Q&A, simple tasks |
-| **Gemma 4 E4B** | **~3 GB** | **Recommended.** Speed + capability balance |
+| Gemma 4 E4B | ~3 GB | Speed + capability balance |
 | Gemma 4 27B MoE | ~8 GB | Stronger reasoning (needs 16 GB+ RAM) |
 | Gemma 4 31B | ~18 GB | Maximum quality (needs 32 GB+ RAM) |
 
