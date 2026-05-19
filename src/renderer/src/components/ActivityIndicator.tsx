@@ -5,6 +5,10 @@ import type { ActivityState } from '@shared/types'
 interface Props {
   state: ActivityState
   cpuPercent?: number
+  gpuPercent?: number
+}
+  state: ActivityState
+  cpuPercent?: number
 }
 
 export default function ActivityIndicator({ state, cpuPercent }: Props) {
