@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, nativeTheme, session, nativeImage } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, nativeTheme, session, nativeImage, dialog } from 'electron'
 import { join } from 'path'
 import { cpus, loadavg } from 'os'
 import { AVAILABLE_MODELS, DEFAULT_MODEL } from '@shared/types'
@@ -635,7 +635,6 @@ app.whenReady().then(async () => {
       throw new Error('Main window not available')
     }
 
-    const { dialog } = require('electron')
     return dialog.showOpenDialog(mainWindow, {
       properties: ['openFile'],
       filters: options?.filters || [{ name: 'All Files', extensions: ['*'] }]
