@@ -1,6 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain, nativeTheme, session, nativeImage } from 'electron'
 import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { cpus, loadavg } from 'os'
 import { AVAILABLE_MODELS, DEFAULT_MODEL } from '@shared/types'
 import {
@@ -59,8 +58,7 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
-    if (is.dev) {
-      mainWindow?.webContents.openDevTools({ mode: 'detach' })
+    if (!app.isPackaged) {      mainWindow?.webContents.openDevTools({ mode: 'detach' })
     }
   })
 
@@ -69,7 +67,7 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
@@ -515,7 +513,8 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
 const chatAbortControllers = new Map<string, AbortController>()
 
 app.whenReady().then(async () => {
-  electronApp.setAppUserModelId('com.ammaar.gemmachat')
+  if (process.platform === 'win32' && !app.isPackaged) app.setAppUserModelId(process.execPath)
+  else if (process.platform === 'win32') app.setAppUserModelId('com.ammaar.gemmachat')
   nativeTheme.themeSource = 'dark'
 
   // Set dock icon (macOS) — ensures the Gemma icon shows in dev mode
@@ -525,7 +524,10 @@ app.whenReady().then(async () => {
   }
 
   app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+    // Allow F12 devtools in dev mode
+    if (!app.isPackaged) window.webContents.on('before-input-event', (_, input) => {
+      if (input.key === 'F12') window.webContents.openDevTools()
+    })
   })
 
   await startWorkspaceServer()

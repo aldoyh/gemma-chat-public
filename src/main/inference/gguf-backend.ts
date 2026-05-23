@@ -1,7 +1,13 @@
-import { getLlama, type Llama, type LlamaModel, type LlamaContext, LlamaChatSession } from 'node-llama-cpp'
 import path from 'path'
 import { existsSync } from 'fs'
 import type { InferenceBackend, BackendStatus, ChatStreamOptions, BackendStreamChunk } from './base'
+
+// Types only — actual module loaded dynamically to avoid startup crash
+type NodeLlamaCppModule = typeof import('node-llama-cpp')
+type Llama = Awaited<ReturnType<NodeLlamaCppModule['getLlama']>>
+type LlamaModel = Awaited<ReturnType<Llama['loadModel']>>
+type LlamaContext = Awaited<ReturnType<LlamaModel['createContext']>>
+type ChatHistoryItem = import('node-llama-cpp').ChatHistoryItem
 
 interface LoadedModel {
   llama: Llama
@@ -10,12 +16,22 @@ interface LoadedModel {
   modelPath: string
 }
 
+let llamaCppModule: NodeLlamaCppModule | null = null
+
+async function getLlamaCpp(): Promise<NodeLlamaCppModule> {
+  if (!llamaCppModule) {
+    llamaCppModule = await import('node-llama-cpp') as NodeLlamaCppModule
+  }
+  return llamaCppModule
+}
+
 export class GGUFBackend implements InferenceBackend {
   private loadedModel: LoadedModel | null = null
   private modelPath: string | null = null
 
   async initialize(): Promise<void> {
     try {
+      const { getLlama } = await getLlamaCpp()
       await getLlama()
     } catch (e) {
       console.log('[gguf-backend] Warning: getLlama not ready:', (e as Error).message)
@@ -58,7 +74,6 @@ export class GGUFBackend implements InferenceBackend {
   }
 
   async install(_onProgress: (progress: { stage: string; message: string }) => void): Promise<void> {
-    // GGUF backend uses node-llama-cpp which is installed via npm
     return
   }
 
@@ -87,20 +102,12 @@ export class GGUFBackend implements InferenceBackend {
     try {
       console.log(`[gguf-backend] Loading model from ${fullPath}`)
 
+      const { getLlama } = await getLlamaCpp()
       const llama = await getLlama()
-
-      const model = await llama.loadModel({
-        modelPath: fullPath
-      })
-
+      const model = await llama.loadModel({ modelPath: fullPath })
       const context = await model.createContext()
 
-      this.loadedModel = {
-        llama,
-        model,
-        context,
-        modelPath: fullPath
-      }
+      this.loadedModel = { llama, model, context, modelPath: fullPath }
       this.modelPath = fullPath
 
       console.log('[gguf-backend] Model loaded successfully')
@@ -122,6 +129,7 @@ export class GGUFBackend implements InferenceBackend {
       throw new Error('No model loaded. Call loadModel() first.')
     }
 
+    const { LlamaChatSession } = await getLlamaCpp()
     const { context } = this.loadedModel
 
     try {
@@ -130,30 +138,61 @@ export class GGUFBackend implements InferenceBackend {
         autoDisposeSequence: true
       })
 
-      // Convert messages to node-llama-cpp format
-      // Note: LlamaChatSession manages the history, but here we provide the whole context
-      // as it's a stateless call from the perspective of this backend method.
-      const history = opts.messages.map(m => ({
-        role: m.role as 'user' | 'assistant' | 'system',
-        content: m.content
-      }))
+      const allMessages = opts.messages
+      const lastUserMsg = allMessages[allMessages.length - 1]
 
-      // The last message is usually the user prompt if we want to use session.prompt()
-      // or we can set the history and call prompt() with the last message.
-      const lastMessage = history[history.length - 1]
-      const previousHistory = history.slice(0, -1)
+      const previousHistory: ChatHistoryItem[] = allMessages.slice(0, -1).map(m => {
+        if (m.role === 'system') {
+          return { type: 'system' as const, text: m.content }
+        } else if (m.role === 'assistant') {
+          return { type: 'model' as const, response: [m.content] }
+        } else {
+          return { type: 'user' as const, text: m.content }
+        }
+      })
 
       session.setChatHistory(previousHistory)
 
-      const iterator = await session.promptWithStream(lastMessage.content, {
+      // Async queue for real-time streaming via onTextChunk callback
+      const chunkQueue: string[] = []
+      let generationDone = false
+      let notifyNext: (() => void) | null = null
+
+      const promptPromise = session.promptWithMeta(lastUserMsg.content, {
         temperature: opts.temperature ?? 0.7,
-        signal: opts.signal
+        signal: opts.signal,
+        onTextChunk: (text: string) => {
+          chunkQueue.push(text)
+          notifyNext?.()
+          notifyNext = null
+        }
       })
 
-      for await (const chunk of iterator) {
-        yield { content: chunk }
+      promptPromise
+        .then(() => {
+          generationDone = true
+          notifyNext?.()
+          notifyNext = null
+        })
+        .catch(() => {
+          generationDone = true
+          notifyNext?.()
+          notifyNext = null
+        })
+
+      while (true) {
+        if (chunkQueue.length > 0) {
+          yield { content: chunkQueue.shift()! }
+        } else if (generationDone) {
+          break
+        } else {
+          await new Promise<void>(resolve => {
+            notifyNext = resolve
+          })
+        }
       }
 
+      await promptPromise
       yield { done: true }
     } catch (e) {
       if ((e as Error).name === 'AbortError') {
@@ -164,4 +203,3 @@ export class GGUFBackend implements InferenceBackend {
     }
   }
 }
-

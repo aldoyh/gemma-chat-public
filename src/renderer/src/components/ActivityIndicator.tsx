@@ -7,9 +7,6 @@ interface Props {
   cpuPercent?: number
   gpuPercent?: number
 }
-  state: ActivityState
-  cpuPercent?: number
-}
 
 export default function ActivityIndicator({ state, cpuPercent }: Props) {
   const [displayLabel, setDisplayLabel] = useState('Idle')
