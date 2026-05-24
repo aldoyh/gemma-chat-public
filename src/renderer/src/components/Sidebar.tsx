@@ -1,3 +1,5 @@
+import type { ModelConfig } from '@shared/types'
+
 interface Conversation {
   id: string
   title: string
@@ -7,6 +9,7 @@ interface Conversation {
 interface Props {
   conversations: Conversation[]
   activeId: string
+  modelConfig: ModelConfig
   onSelect: (id: string) => void
   onNew: () => void
   onDelete: (id: string) => void
@@ -15,10 +18,19 @@ interface Props {
 export default function Sidebar({
   conversations,
   activeId,
+  modelConfig,
   onSelect,
   onNew,
   onDelete
 }: Props) {
+  const badgeColor =
+    modelConfig.source === 'ollama' ? 'bg-emerald-400' :
+    modelConfig.source === 'mlx' ? 'bg-blue-400' : 'bg-orange-400'
+
+  const badgeLabel =
+    modelConfig.source === 'ollama' ? 'Ollama' :
+    modelConfig.source === 'mlx' ? 'MLX' : 'GGUF'
+
   return (
     <div className="drag flex h-full w-60 shrink-0 flex-col border-r border-white/[0.06] bg-black/20">
       <div className="h-11 shrink-0" />
@@ -63,8 +75,8 @@ export default function Sidebar({
       <div className="no-drag border-t border-white/[0.06] p-3 text-[11px] text-ink-400">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Running locally
+            <span className={`inline-block h-1.5 w-1.5 rounded-full ${badgeColor}`} />
+            {badgeLabel}
           </div>
           <a
             href="https://x.com/ammaar"

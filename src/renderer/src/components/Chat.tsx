@@ -257,6 +257,7 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
       <Sidebar
         conversations={conversations}
         activeId={activeId}
+        modelConfig={modelConfig}
         onSelect={setActiveId}
         onNew={() => createConversation(activeConversation.mode)}
         onDelete={deleteConversation}
