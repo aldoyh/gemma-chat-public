@@ -1,6 +1,6 @@
-import { useState, type ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
 import { useI18n } from '../i18n/useI18n'
-import type { ModelConfig } from '@shared/types'
+import type { ModelConfig, OllamaModelInfo } from '@shared/types'
 import { AVAILABLE_MODELS, DEFAULT_MODEL } from '@shared/types'
 
 interface Props {
@@ -9,28 +9,50 @@ interface Props {
   disabled?: boolean
 }
 
-export default function ModelSourceSelector({
-  modelConfig,
-  onConfigChange,
-  disabled = false
-}: Props): ReactElement {
+export default function ModelSourceSelector({ modelConfig, onConfigChange, disabled = false }: Props): ReactElement {
   const { t, language } = useI18n()
   const [ggufPath, setGgufPath] = useState(modelConfig.path || '')
+  const [ollamaModels, setOllamaModels] = useState<OllamaModelInfo[]>([])
+  const [ollamaLoading, setOllamaLoading] = useState(false)
+
+  useEffect(() => {
+    if (modelConfig.source !== 'ollama') return
+    setOllamaLoading(true)
+    window.api.listOllamaModels().then((models) => {
+      setOllamaModels(models)
+      if (models.length > 0 && !modelConfig.model) {
+        onConfigChange({ source: 'ollama', model: models[0].name })
+      }
+      setOllamaLoading(false)
+    }).catch(() => setOllamaLoading(false))
+  }, [modelConfig.source])
 
   const selectGGUFFile = async () => {
-    const result = await (window as any).api?.invoke?.('dialog:open-file', {
+    const result = await window.api.openFileDialog({
       filters: [
         { name: 'GGUF Models', extensions: ['gguf'] },
         { name: 'All Files', extensions: ['*'] }
       ]
     })
-
     if (!result.canceled && result.filePaths.length > 0) {
       const path = result.filePaths[0]
       setGgufPath(path)
       onConfigChange({ source: 'gguf', path })
     }
   }
+
+  const refreshOllama = () => {
+    setOllamaLoading(true)
+    window.api.listOllamaModels().then((models) => {
+      setOllamaModels(models)
+      setOllamaLoading(false)
+    }).catch(() => setOllamaLoading(false))
+  }
+
+  const btn = (active: boolean) =>
+    `w-full text-left rounded-lg border-2 p-3 transition ${
+      active ? 'border-blue-500 bg-blue-500/10' : 'border-white/10 bg-white/5 hover:border-white/20'
+    } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`
 
   return (
     <div className={`space-y-4 rounded-lg border border-white/10 bg-white/5 p-4 ${language === 'ar' ? 'rtl' : ''}`}>
@@ -39,21 +61,56 @@ export default function ModelSourceSelector({
           {t.setup.modelSource}
         </label>
 
-        {/* MLX (Download) Option */}
+        {/* Ollama option */}
+        <button
+          onClick={() => onConfigChange({ source: 'ollama', model: ollamaModels[0]?.name })}
+          disabled={disabled}
+          className={btn(modelConfig.source === 'ollama')}
+        >
+          <div className="font-medium flex items-center gap-2">
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+            Ollama (local)
+          </div>
+          <div className="text-xs text-white/60">Use any model from your local Ollama install</div>
+        </button>
+
+        {modelConfig.source === 'ollama' && (
+          <div className="flex gap-2">
+            <select
+              value={modelConfig.model || ''}
+              onChange={(e) => onConfigChange({ source: 'ollama', model: e.target.value })}
+              disabled={disabled || ollamaLoading}
+              className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+            >
+              {ollamaLoading && <option value="">Loading…</option>}
+              {!ollamaLoading && ollamaModels.length === 0 && <option value="">No models found</option>}
+              {ollamaModels.map((m) => (
+                <option key={m.name} value={m.name}>
+                  {m.name}{m.size ? ` (${m.size})` : ''}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={refreshOllama}
+              disabled={disabled || ollamaLoading}
+              title="Refresh Ollama model list"
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs hover:bg-white/10"
+            >
+              ↺
+            </button>
+          </div>
+        )}
+
+        {/* MLX (HuggingFace download) option */}
         <button
           onClick={() => onConfigChange({ source: 'mlx', model: modelConfig.model || DEFAULT_MODEL })}
           disabled={disabled}
-          className={`w-full text-left rounded-lg border-2 p-3 transition ${
-            modelConfig.source === 'mlx'
-              ? 'border-blue-500 bg-blue-500/10'
-              : 'border-white/10 bg-white/5 hover:border-white/20'
-          } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={btn(modelConfig.source === 'mlx')}
         >
           <div className="font-medium">{t.setup.downloadFromHF}</div>
           <div className="text-xs text-white/60">{t.setup.downloadFromHFDesc}</div>
         </button>
 
-        {/* MLX Model Selector */}
         {modelConfig.source === 'mlx' && (
           <select
             value={modelConfig.model || DEFAULT_MODEL}
@@ -61,7 +118,7 @@ export default function ModelSourceSelector({
             disabled={disabled}
             className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
           >
-            {AVAILABLE_MODELS.map(m => (
+            {AVAILABLE_MODELS.map((m) => (
               <option key={m.name} value={m.name}>
                 {m.label} ({m.size})
               </option>
@@ -69,21 +126,16 @@ export default function ModelSourceSelector({
           </select>
         )}
 
-        {/* GGUF (Local) Option */}
+        {/* GGUF (local file) option */}
         <button
           onClick={() => onConfigChange({ source: 'gguf', path: ggufPath })}
           disabled={disabled}
-          className={`w-full text-left rounded-lg border-2 p-3 transition ${
-            modelConfig.source === 'gguf'
-              ? 'border-green-500 bg-green-500/10'
-              : 'border-white/10 bg-white/5 hover:border-white/20'
-          } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={btn(modelConfig.source === 'gguf')}
         >
           <div className="font-medium">{t.setup.useLocalGGUF}</div>
           <div className="text-xs text-white/60">{t.setup.useLocalGGUFDesc}</div>
         </button>
 
-        {/* GGUF File Selector */}
         {modelConfig.source === 'gguf' && (
           <div className="space-y-2">
             <button
@@ -94,9 +146,7 @@ export default function ModelSourceSelector({
               {ggufPath ? t.setup.changeFile : t.setup.selectModelFile}
             </button>
             {ggufPath && (
-              <div className="text-xs text-white/70 break-all">
-                {ggufPath.split('/').pop()}
-              </div>
+              <div className="text-xs text-white/70 break-all">{ggufPath.split('/').pop()}</div>
             )}
           </div>
         )}
