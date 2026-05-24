@@ -1,4 +1,4 @@
-export type BackendType = 'mlx' | 'gguf'
+export type BackendType = 'mlx' | 'gguf' | 'ollama'
 
 export interface BackendStatus {
   available: boolean
