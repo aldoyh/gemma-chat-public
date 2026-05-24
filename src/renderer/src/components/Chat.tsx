@@ -69,8 +69,11 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
   const [cpuPercent] = useState(0)
   const streamRef = useRef<{ abort: boolean }>({ abort: false })
 
-  // Extract model name for API calls (use model name for MLX, path for GGUF)
-  const modelName = modelConfig.source === 'mlx' ? (modelConfig.model || 'unknown') : (modelConfig.path || 'custom')
+  // Extract model name for API calls
+  const modelName =
+    modelConfig.source === 'mlx' ? (modelConfig.model || 'unknown') :
+    modelConfig.source === 'ollama' ? (modelConfig.model || 'unknown') :
+    (modelConfig.path || 'custom')
 
   // Notify parent when activity state changes
   useEffect(() => {
@@ -390,8 +393,14 @@ function Header({
     return () => document.removeEventListener('mousedown', handleClick)
   }, [pickerOpen])
 
-  const modelName = modelConfig.source === 'mlx' ? (modelConfig.model || 'unknown') : (modelConfig.path || 'custom')
-  const currentLabel = AVAILABLE_MODELS.find((m) => m.name === modelName)?.label ?? modelName
+  const modelName =
+    modelConfig.source === 'mlx' ? (modelConfig.model || 'unknown') :
+    modelConfig.source === 'ollama' ? (modelConfig.model || 'unknown') :
+    (modelConfig.path || 'custom')
+  const currentLabel =
+    modelConfig.source === 'ollama'
+      ? (modelConfig.model || 'Ollama')
+      : (AVAILABLE_MODELS.find((m) => m.name === modelName)?.label ?? modelName)
 
   return (
     <div className="drag flex h-11 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
