@@ -51,6 +51,22 @@ function AppContent() {
         })
       })
 
+      // 1. Check Ollama first — if running, skip setup wizard entirely
+      const { running } = await window.api.checkOllama()
+      if (running) {
+        const ollamaModels = await window.api.listOllamaModels()
+        const firstModel = ollamaModels[0]?.name ?? 'gemma3:4b'
+        const ollamaConfig: ModelConfig = { source: 'ollama', model: firstModel }
+        setState({
+          phase: 'setup',
+          status: { stage: 'starting-mlx', message: 'Connecting to Ollama…' },
+          modelConfig: ollamaConfig
+        })
+        window.api.startSetup(ollamaConfig)
+        return
+      }
+
+      // 2. Fall back to original MLX check
       const local = await window.api.listLocalModels()
       const hasDefault = local.some(
         (m) => m === DEFAULT_MODEL || m.startsWith(DEFAULT_MODEL + ':')
