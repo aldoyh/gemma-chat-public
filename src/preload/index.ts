@@ -5,7 +5,8 @@ import type {
   StreamChunk,
   WorkspaceInfo,
   WorkspaceFile,
-  ModelConfig
+  ModelConfig,
+  OllamaModelInfo
 } from '../shared/types'
 
 const api = {
@@ -22,6 +23,15 @@ const api = {
   },
 
   listLocalModels: (): Promise<string[]> => ipcRenderer.invoke('models:list-local'),
+
+  checkOllama: (): Promise<{ running: boolean }> =>
+    ipcRenderer.invoke('ollama:check'),
+
+  listOllamaModels: (): Promise<OllamaModelInfo[]> =>
+    ipcRenderer.invoke('ollama:list-models'),
+
+  openFileDialog: (options?: { filters?: Array<{ name: string; extensions: string[] }> }): Promise<{ canceled: boolean; filePaths: string[] }> =>
+    ipcRenderer.invoke('dialog:open-file', options),
 
   sendChat: async (req: ChatRequest, onChunk: (c: StreamChunk) => void): Promise<void> => {
     const { channel } = (await ipcRenderer.invoke('chat:send', req)) as { channel: string }
