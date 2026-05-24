@@ -1,6 +1,7 @@
 import type { InferenceBackend, BackendType } from './base'
 import { MLXBackend } from './mlx-backend'
 import { GGUFBackend } from './gguf-backend'
+import { OllamaBackend } from './ollama-backend'
 
 let currentBackend: InferenceBackend | null = null
 let currentBackendType: BackendType | null = null
@@ -14,6 +15,9 @@ export async function createBackend(type: BackendType): Promise<InferenceBackend
       break
     case 'gguf':
       backend = new GGUFBackend()
+      break
+    case 'ollama':
+      backend = new OllamaBackend()
       break
     default:
       throw new Error(`Unknown backend type: ${type}`)
@@ -64,4 +68,5 @@ export async function shutdownBackend(): Promise<void> {
 
 export { MLXBackend } from './mlx-backend'
 export { GGUFBackend } from './gguf-backend'
+export { OllamaBackend } from './ollama-backend'
 export type { InferenceBackend, BackendType, BackendStatus, ChatStreamOptions, BackendStreamChunk } from './base'
