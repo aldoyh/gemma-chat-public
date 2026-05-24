@@ -10,6 +10,7 @@ import {
   type InferenceBackend
 } from './inference'
 import { ensureCleanFirstRunModelState } from './mlx'
+import { isOllamaRunning, listOllamaModels, ollamaModelToInfo } from './ollama'
 import {
   TOOLS,
   chatSystemPrompt,
@@ -20,6 +21,7 @@ import {
   cleanFileContent,
   type ToolContext
 } from './tools'
+import { getExampleRecipe, type ExampleRecipe } from './example-recipes'
 import {
   ensureWorkspace,
   startWorkspaceServer,
@@ -89,7 +91,7 @@ function getCPULoad(): number {
 async function ensureBackendRunning(modelConfig: ModelConfig): Promise<InferenceBackend> {
   const backend = getCurrentBackend()
   const backendType = getCurrentBackendType()
-  const targetType = modelConfig.source === 'mlx' ? 'mlx' : 'gguf'
+  const targetType = modelConfig.source === 'mlx' ? 'mlx' : modelConfig.source === 'ollama' ? 'ollama' : 'gguf'
 
   const onProgress = (p: {
     message: string
@@ -111,6 +113,8 @@ async function ensureBackendRunning(modelConfig: ModelConfig): Promise<Inference
       await backend.loadModel(modelConfig.model, onProgress)
     } else if (targetType === 'gguf' && modelConfig.path) {
       await backend.loadModel(modelConfig.path, onProgress)
+    } else if (targetType === 'ollama' && modelConfig.model) {
+      await backend.loadModel(modelConfig.model, onProgress)
     }
     return backend
   }
@@ -168,6 +172,18 @@ async function ensureBackendRunning(modelConfig: ModelConfig): Promise<Inference
       await ggufBackend.loadModel(modelConfig.path, onProgress)
 
       return ggufBackend
+    } else if (modelConfig.source === 'ollama') {
+      const modelName = modelConfig.model
+      if (!modelName) throw new Error('Ollama model name required')
+
+      await switchBackend('ollama')
+      const ollamaBackend = getCurrentBackend()
+      if (!ollamaBackend) throw new Error('Failed to initialize Ollama backend')
+
+      send('setup:status', { stage: 'starting-mlx', message: `Connecting to Ollama (${modelName})…` })
+      await ollamaBackend.loadModel(modelName, onProgress)
+
+      return ollamaBackend
     } else {
       throw new Error(`Unknown model source: ${modelConfig.source}`)
     }
@@ -191,7 +207,7 @@ async function handleSetup(modelConfig: ModelConfig): Promise<void> {
 }
 
 const MAX_TOOL_ROUNDS_CHAT = 6
-const MAX_TOOL_ROUNDS_CODE = 40
+const MAX_TOOL_ROUNDS_CODE = 12
 
 function actionTarget(_name: string, args: Record<string, unknown>): string | undefined {
   if (typeof args.path === 'string') return args.path
@@ -200,6 +216,60 @@ function actionTarget(_name: string, args: Record<string, unknown>): string | un
   if (typeof args.command === 'string')
     return String(args.command).slice(0, 80)
   return undefined
+}
+
+function parsePartialWriteFile(buffer: string): { path: string; content: string } | null {
+  const open = buffer.match(/<action\s+name\s*=\s*["']?write_file["']?\s*>/i)
+  if (!open || open.index == null) return null
+
+  const actionBody = buffer.slice(open.index + open[0].length)
+  const path = actionBody.match(/<path>([^<]+)<\/path>/i)?.[1]?.trim()
+  if (!path) return null
+
+  const contentOpen = actionBody.match(/<content>/i)
+  if (!contentOpen || contentOpen.index == null) return null
+
+  let content = actionBody.slice(contentOpen.index + contentOpen[0].length)
+  const closeIdx = content.search(/<\/content>/i)
+  if (closeIdx >= 0) content = content.slice(0, closeIdx)
+  if (content.startsWith('\n')) content = content.slice(1)
+  if (content.trim().length < 10) return null
+
+  return { path, content }
+}
+
+async function runExampleRecipe(
+  recipe: ExampleRecipe,
+  ctx: ToolContext,
+  emit: (chunk: StreamChunk) => void
+): Promise<void> {
+  for (const file of recipe.files) {
+    const args: Record<string, unknown> = { path: file.path, content: file.content }
+    const call: ToolCall = {
+      id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      name: 'write_file',
+      args,
+      running: true
+    }
+    emit({ type: 'tool_call', call })
+    emit({ type: 'activity', activity: { kind: 'tool', tool: 'write_file', target: file.path } })
+    const result = await runTool('write_file', args, ctx)
+    emit({ type: 'tool_result', id: call.id, result })
+  }
+
+  const previewCall: ToolCall = {
+    id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    name: 'open_preview',
+    args: {},
+    running: true
+  }
+  emit({ type: 'tool_call', call: previewCall })
+  emit({ type: 'activity', activity: { kind: 'tool', tool: 'open_preview' } })
+  const previewResult = await runTool('open_preview', {}, ctx)
+  emit({ type: 'tool_result', id: previewCall.id, result: previewResult })
+  emit({ type: 'token', text: recipe.summary })
+  emit({ type: 'activity', activity: { kind: 'idle' } })
+  emit({ type: 'done' })
 }
 
 async function handleChat(req: ChatRequest, channel: string): Promise<void> {
@@ -247,6 +317,15 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
 
     const useTools = req.mode === 'code' || req.enableTools
     const maxRounds = req.mode === 'code' ? MAX_TOOL_ROUNDS_CODE : MAX_TOOL_ROUNDS_CHAT
+
+    if (req.mode === 'code') {
+      const lastUserPrompt = [...req.messages].reverse().find((m) => m.role === 'user')?.content ?? ''
+      const recipe = getExampleRecipe(lastUserPrompt)
+      if (recipe) {
+        await runExampleRecipe(recipe, ctx, emit)
+        return
+      }
+    }
 
     emit({ type: 'activity', activity: { kind: 'thinking', chars: 0 } })
 
@@ -469,6 +548,43 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
         }
       }
 
+      if (!executedAction && useTools) {
+        const partial = parsePartialWriteFile(buffer)
+        if (partial) {
+          const call: ToolCall = {
+            id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            name: 'write_file',
+            args: partial,
+            running: true
+          }
+          emit({ type: 'tool_call', call })
+          emit({
+            type: 'activity',
+            activity: { kind: 'tool', tool: 'write_file', target: partial.path }
+          })
+
+          let result: string
+          let hadError = false
+          try {
+            result = await runTool('write_file', partial, ctx)
+            emit({ type: 'tool_result', id: call.id, result })
+          } catch (e) {
+            result = `Error: ${(e as Error).message}`
+            hadError = true
+            emit({ type: 'tool_result', id: call.id, error: result })
+          }
+
+          baseMessages.push({ role: 'assistant', content: buffer })
+          baseMessages.push({
+            role: 'tool',
+            content: `[${hadError ? 'error' : 'ok'}] write_file: ${result}`
+          })
+          executedAction = true
+          emit({ type: 'activity', activity: { kind: 'thinking', chars: 0 } })
+          continue
+        }
+      }
+
       if (!executedAction) {
         // In Build mode, if the model just described a plan without writing code,
         // nudge it to start coding immediately instead of ending the turn.
@@ -579,6 +695,15 @@ app.whenReady().then(async () => {
       return []
     }
     return await backend.listModels()
+  })
+
+  ipcMain.handle('ollama:check', async () => {
+    return { running: await isOllamaRunning() }
+  })
+
+  ipcMain.handle('ollama:list-models', async () => {
+    const entries = await listOllamaModels()
+    return entries.map(ollamaModelToInfo)
   })
 
   ipcMain.handle('chat:send', async (_e, req: ChatRequest) => {
