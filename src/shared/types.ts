@@ -75,6 +75,7 @@ export type StreamChunk =
   | { type: 'tool_call'; call: ToolCall }
   | { type: 'tool_result'; id: string; result?: string; error?: string }
   | { type: 'activity'; activity: AgentActivity }
+  | { type: 'metrics'; cpuPercent: number }
   | { type: 'done' }
   | { type: 'error'; error: string }
 
@@ -95,37 +96,36 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
     label: 'Gemma 2 2B',
     size: '1.5 GB',
     sizeBytes: 1_500_000_000,
-    description: 'Ultra-reliable. Fast & lightweight. Excellent fallback for all Macs.',
-    recommended: false
+    description: 'Recommended default. Stable, fast, and reliable on all supported Macs.',
+    recommended: true
   },
   {
     name: 'mlx-community/gemma-4-e2b-it-4bit',
     label: 'Gemma 4 E2B',
     size: '1.5 GB',
     sizeBytes: 1_500_000_000,
-    description: 'Edge-sized. Fast & lightweight. Text + image + audio. Runs on 8GB+ Macs.'
+    description: 'Experimental. May need upstream MLX/model fixes before chat quality is reliable.'
   },
   {
     name: 'mlx-community/gemma-4-e4b-it-4bit',
     label: 'Gemma 4 E4B',
     size: '3 GB',
     sizeBytes: 3_000_000_000,
-    description: 'Best all-rounder. Text + image + audio. Runs on 8GB+ Macs.',
-    recommended: true
+    description: 'Experimental. Larger Gemma 4 variant; keep as manual opt-in for now.'
   },
   {
     name: 'mlx-community/gemma-4-26b-a4b-it-4bit',
     label: 'Gemma 4 27B MoE',
     size: '16 GB',
     sizeBytes: 16_000_000_000,
-    description: 'Mixture-of-Experts (26B, 4B active). 16GB+ RAM recommended.'
+    description: 'Experimental MoE model. 16GB+ RAM recommended.'
   },
   {
     name: 'mlx-community/gemma-4-31b-it-4bit',
     label: 'Gemma 4 31B',
     size: '18 GB',
     sizeBytes: 18_000_000_000,
-    description: 'Frontier dense model. Best quality. 32GB+ RAM recommended.'
+    description: 'Experimental dense model. 32GB+ RAM recommended.'
   }
 ]
 
@@ -139,10 +139,16 @@ export interface SystemMetrics {
   timestamp: number
 }
 
-export type ModelSource = 'mlx' | 'gguf'
+export type ModelSource = 'mlx' | 'gguf' | 'ollama'
+
+export interface OllamaModelInfo {
+  name: string
+  label: string
+  size: string
+}
 
 export interface ModelConfig {
   source: ModelSource
-  path?: string // For local GGUF: absolute path to .gguf file
-  model?: string // For MLX: HuggingFace model ID
+  path?: string   // GGUF: absolute path to .gguf file
+  model?: string  // MLX: HuggingFace model ID; Ollama: model name like 'qwen3.5:9b'
 }
