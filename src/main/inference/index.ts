@@ -31,17 +31,20 @@ export async function switchBackend(
   type: BackendType,
   config?: { modelPath?: string }
 ): Promise<void> {
-  // Shutdown old backend if different type
-  if (currentBackend && currentBackendType !== type) {
-    await currentBackend.shutdown()
-  }
-
   if (currentBackendType === type && currentBackend) {
-    // Already using this backend
+    // Already using this backend type — no switch needed
     return
   }
 
-  currentBackend = await createBackend(type)
+  // Create new backend FIRST, before shutting down the old one.
+  // If initialization throws, the old backend remains intact.
+  const newBackend = await createBackend(type)
+
+  if (currentBackend && currentBackendType !== type) {
+    await currentBackend.shutdown().catch(() => { /* ignore shutdown errors */ })
+  }
+
+  currentBackend = newBackend
   currentBackendType = type
 
   // For GGUF, load the model file

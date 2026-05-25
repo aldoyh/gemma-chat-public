@@ -8,6 +8,8 @@ import {
   listTree,
   previewUrl
 } from './workspace'
+import { ensureHtmlAssetReferences } from './html-assets'
+import { getWriteFileContent } from './write-file-args'
 
 export interface ToolContext {
   conversationId: string
@@ -132,13 +134,45 @@ async function calc(args: Record<string, unknown>): Promise<string> {
 
 async function writeFile(args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
   const path = String(args.path ?? '').trim()
-  const raw = typeof args.content === 'string' ? args.content : ''
   if (!path) return 'Error: missing <path>'
+  const raw = getWriteFileContent(args)
+  if (raw == null) return 'Error: missing <content>'
   const content = cleanFileContent(raw, path)
   await wsWriteFile(ctx.conversationId, path, content)
+  await repairIndexAssetReferences(ctx, path)
   ctx.onFileChange?.()
   const lines = content.split('\n').length
   return `Wrote ${path} (${content.length} bytes, ${lines} lines).`
+}
+
+async function repairIndexAssetReferences(ctx: ToolContext, writtenPath: string): Promise<void> {
+  const normalizedPath = writtenPath.replace(/^\.\/+/, '')
+  if (!['index.html', 'style.css', 'app.js'].includes(normalizedPath)) return
+
+  try {
+    const indexHtml = await wsReadFile(ctx.conversationId, 'index.html')
+
+    const refs: { stylesheet?: string; script?: string } = {}
+    try {
+      await wsReadFile(ctx.conversationId, 'style.css')
+      refs.stylesheet = 'style.css'
+    } catch {
+      // style.css does not exist yet
+    }
+    try {
+      await wsReadFile(ctx.conversationId, 'app.js')
+      refs.script = 'app.js'
+    } catch {
+      // app.js does not exist yet
+    }
+
+    const repaired = ensureHtmlAssetReferences(indexHtml, refs)
+    if (repaired !== indexHtml) {
+      await wsWriteFile(ctx.conversationId, 'index.html', repaired)
+    }
+  } catch {
+    // No index.html yet; the next relevant file write will retry.
+  }
 }
 
 export function cleanFileContent(raw: string, path: string): string {
@@ -172,6 +206,12 @@ export function cleanFileContent(raw: string, path: string): string {
     const trimmed = s.trim()
     const lastBrace = Math.max(trimmed.lastIndexOf('}'), trimmed.lastIndexOf(']'))
     if (lastBrace >= 0) s = trimmed.slice(0, lastBrace + 1) + '\n'
+  } else if (lower.endsWith('.css')) {
+    const trimmed = s.trim()
+    if (trimmed && !trimmed.endsWith('}')) {
+      const lastRuleEnd = trimmed.lastIndexOf('}')
+      if (lastRuleEnd >= 0) s = trimmed.slice(0, lastRuleEnd + 1) + '\n'
+    }
   }
 
   return s
@@ -466,7 +506,7 @@ export function codeSystemPrompt(workspacePath: string, previewHref: string): st
     '',
     'EXAMPLE — multi-file build (FIRST response)',
     '',
-    "I'll split this into three files: index.html for structure, style.css for the design, and app.js for the countdown behavior. Starting with the HTML shell.",
+    "I'll split this into three files: index.html for structure, style.css for the design, and app.js for small interactions. Starting with the HTML shell.",
     '',
     '<action name="write_file">',
     '<path>index.html</path>',
@@ -479,7 +519,7 @@ export function codeSystemPrompt(workspacePath: string, previewHref: string): st
     '<link rel="stylesheet" href="style.css">',
     '<script src="app.js" defer></script>',
     '</head>',
-    '<body><main><h1>Coming soon</h1></main></body>',
+    '<body><main><h1>Coming soon</h1><button id="notify">Notify me</button></main></body>',
     '</html>',
     '</content>',
     '</action>',
@@ -490,6 +530,9 @@ export function codeSystemPrompt(workspacePath: string, previewHref: string): st
     '- Never wrap <action> tags in ``` code fences.',
     '- Paths are relative to the workspace (no leading slashes).',
     '- One action per response, then STOP and wait.',
+    '- Keep files compact: index.html under 120 lines, style.css under 140 lines, app.js under 120 lines.',
+    '- Do not generate repeated numeric lists, giant shadows, long keyframe sequences, or decorative filler.',
+    '- Prefer a few polished rules over exhaustive CSS. Use at most one box-shadow per selector.',
     '',
     'AVAILABLE TOOLS',
     '',

@@ -1,7 +1,7 @@
 export const ar = {
   setup: {
     title: 'مرحباً بك في Gemma Chat',
-    subtitle: 'مساعد ذكي محلي، مدعوم بـ Gemma 4 من Google.\nيعمل 100% على جهازك Mac. بدون حساب، بدون سحابة.',
+    subtitle: 'مساعد ذكي محلي، مدعوم بنماذج Gemma.\nيعمل 100% على جهازك Mac. بدون حساب، بدون سحابة.',
     pickModel: 'اختر نموذج',
     download: 'تحميل',
     installNote: 'سنثبت runtime MLX إذا لزم الأمر. أوزان النموذج مخزنة محلياً.',

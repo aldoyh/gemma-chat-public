@@ -94,9 +94,20 @@ export default function ModelSourceSelector({ modelConfig, onConfigChange, disab
               onClick={refreshOllama}
               disabled={disabled || ollamaLoading}
               title="Refresh Ollama model list"
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs hover:bg-white/10"
+              className="flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10"
             >
-              ↺
+              <svg
+                viewBox="0 0 16 16"
+                className={`h-3.5 w-3.5 ${ollamaLoading ? 'animate-spin' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M13.5 8a5.5 5.5 0 1 1-1.4-3.6" />
+                <path d="M13.5 2.5V5.5H10.5" />
+              </svg>
             </button>
           </div>
         )}

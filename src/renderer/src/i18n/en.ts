@@ -1,7 +1,7 @@
 export const en = {
   setup: {
     title: 'Welcome to Gemma Chat',
-    subtitle: "A local AI assistant, powered by Google's Gemma 4.\nRuns 100% on your Mac. No account, no cloud.",
+    subtitle: "A local AI assistant, powered by Gemma models.\nRuns 100% on your Mac. No account, no cloud.",
     pickModel: 'Pick a model',
     download: 'Download',
     installNote: "We'll install MLX runtime if needed. Model weights are cached locally.",

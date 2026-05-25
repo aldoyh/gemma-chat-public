@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AVAILABLE_MODELS, type AgentMode, type ChatMessage, type ToolCall, type StreamChunk, type ActivityState, type ModelConfig } from '@shared/types'
+import { AVAILABLE_MODELS, type AgentMode, type ChatMessage, type ToolCall, type StreamChunk, type ActivityState, type ModelConfig, type OllamaModelInfo } from '@shared/types'
 import gemmaLogoUrl from '../assets/gemma-logo.png'
 import Composer from './Composer'
 import Message from './Message'
@@ -29,7 +29,7 @@ function loadConversations(): Conversation[] {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const arr = JSON.parse(raw) as Conversation[]
-    return arr.map((c) => ({ ...c, mode: c.mode ?? 'code' }))
+    return arr.map((c) => ({ ...c, mode: c.mode ?? 'chat' }))
   } catch {
     return []
   }
@@ -43,7 +43,7 @@ function saveConversations(cs: Conversation[]): void {
   }
 }
 
-function newConversation(mode: AgentMode = 'code'): Conversation {
+function newConversation(mode: AgentMode = 'chat'): Conversation {
   return {
     id: `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     title: 'New chat',
@@ -93,7 +93,7 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
     setConversations((cs) => cs.map((c) => (c.id === activeId ? fn(c) : c)))
   }
 
-  function createConversation(mode: AgentMode = 'code'): void {
+  function createConversation(mode: AgentMode = 'chat'): void {
     const c = newConversation(mode)
     setConversations((cs) => [c, ...cs])
     setActiveId(c.id)
@@ -168,7 +168,7 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
           conversationId: activeId,
           messages: history,
           model: modelName,
-          enableTools: true,
+          enableTools: conv.mode === 'code',
           mode: conv.mode
         },
         (chunk: StreamChunk) => {
@@ -380,7 +380,14 @@ function Header({
   cpuPercent: number
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [ollamaModels, setOllamaModels] = useState<OllamaModelInfo[]>([])
   const pickerRef = useRef<HTMLDivElement>(null)
+
+  // Fetch Ollama models when source is ollama
+  useEffect(() => {
+    if (modelConfig.source !== 'ollama') return
+    window.api.listOllamaModels().then(setOllamaModels).catch(() => setOllamaModels([]))
+  }, [modelConfig.source])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -398,10 +405,15 @@ function Header({
     modelConfig.source === 'mlx' ? (modelConfig.model || 'unknown') :
     modelConfig.source === 'ollama' ? (modelConfig.model || 'unknown') :
     (modelConfig.path || 'custom')
+
   const currentLabel =
     modelConfig.source === 'ollama'
       ? (modelConfig.model || 'Ollama')
       : (AVAILABLE_MODELS.find((m) => m.name === modelName)?.label ?? modelName)
+
+  const dotColor =
+    modelConfig.source === 'ollama' ? 'bg-emerald-400' :
+    modelConfig.source === 'mlx' ? 'bg-blue-400' : 'bg-orange-400'
 
   return (
     <div className="drag flex h-11 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
@@ -423,7 +435,7 @@ function Header({
             onClick={() => setPickerOpen((o) => !o)}
             className="flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-[11.5px] text-ink-400 transition-all duration-200 hover:bg-white/[0.05] hover:text-ink-100"
           >
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotColor}`} />
             {currentLabel}
             <svg viewBox="0 0 16 16" className={`h-3 w-3 transition-transform duration-200 ${pickerOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
@@ -434,37 +446,68 @@ function Header({
               <div className="mb-1 px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-ink-400">
                 Switch model
               </div>
-              {AVAILABLE_MODELS.map((m) => (
-                <button
-                  key={m.name}
-                  onClick={() => {
-                    setPickerOpen(false)
-                    if (m.name !== modelName) onSwitchModel({ source: 'mlx', model: m.name })
-                  }}
-                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition-all duration-150 ${
-                    m.name === modelName
-                      ? 'bg-white/[0.07] text-white'
-                      : 'text-ink-200 hover:bg-white/[0.04]'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center gap-1.5 text-[12.5px] font-medium">
-                      {m.label}
-                      {m.recommended && (
-                        <span className="rounded-full bg-white/10 px-1.5 py-[1px] text-[9px] font-medium uppercase tracking-wider text-ink-200">
-                          rec
-                        </span>
+              {modelConfig.source === 'ollama' ? (
+                ollamaModels.length === 0 ? (
+                  <div className="px-2.5 py-2 text-[12px] text-ink-400">No Ollama models found</div>
+                ) : (
+                  ollamaModels.map((m) => (
+                    <button
+                      key={m.name}
+                      onClick={() => {
+                        setPickerOpen(false)
+                        if (m.name !== modelName) onSwitchModel({ source: 'ollama', model: m.name })
+                      }}
+                      className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition-all duration-150 ${
+                        m.name === modelName
+                          ? 'bg-white/[0.07] text-white'
+                          : 'text-ink-200 hover:bg-white/[0.04]'
+                      }`}
+                    >
+                      <div>
+                        <div className="text-[12.5px] font-medium">{m.label || m.name}</div>
+                        {m.size && <div className="mt-0.5 text-[11px] text-ink-400">{m.size}</div>}
+                      </div>
+                      {m.name === modelName && (
+                        <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
                       )}
+                    </button>
+                  ))
+                )
+              ) : (
+                AVAILABLE_MODELS.map((m) => (
+                  <button
+                    key={m.name}
+                    onClick={() => {
+                      setPickerOpen(false)
+                      if (m.name !== modelName) onSwitchModel({ source: 'mlx', model: m.name })
+                    }}
+                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition-all duration-150 ${
+                      m.name === modelName
+                        ? 'bg-white/[0.07] text-white'
+                        : 'text-ink-200 hover:bg-white/[0.04]'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5 text-[12.5px] font-medium">
+                        {m.label}
+                        {m.recommended && (
+                          <span className="rounded-full bg-white/10 px-1.5 py-[1px] text-[9px] font-medium uppercase tracking-wider text-ink-200">
+                            rec
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-ink-400">{m.size}</div>
                     </div>
-                    <div className="mt-0.5 text-[11px] text-ink-400">{m.size}</div>
-                  </div>
-                  {m.name === modelName && (
-                    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                </button>
-              ))}
+                    {m.name === modelName && (
+                      <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </button>
+                ))
+              )}
             </div>
           )}
         </div>

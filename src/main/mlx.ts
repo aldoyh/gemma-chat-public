@@ -3,6 +3,7 @@ import { spawn, ChildProcess, spawnSync } from 'child_process'
 import { join } from 'path'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { AVAILABLE_MODELS } from '../shared/types'
+import { formatMessagesForMLX } from './inference/message-format'
 
 export const MLX_PORT = 11435
 const MLX_HOST = `127.0.0.1:${MLX_PORT}`
@@ -10,6 +11,7 @@ export const MLX_URL = `http://${MLX_HOST}`
 
 let serverProc: ChildProcess | null = null
 let currentModel: string | null = null
+let serverStartPromise: Promise<void> | null = null
 
 // ---------------------------------------------------------------------------
 // Paths — everything lives under <appData>/mlx/
@@ -315,6 +317,25 @@ export async function startServer(
   onProgress?: (p: ServerProgress) => void,
   skipPostLoadRepair = false
 ): Promise<void> {
+  if (serverStartPromise) {
+    await serverStartPromise
+    if (serverProc && !serverProc.killed && currentModel === model) return
+  }
+
+  serverStartPromise = startServerInternal(python, model, onProgress, skipPostLoadRepair)
+    .finally(() => {
+      serverStartPromise = null
+    })
+
+  return serverStartPromise
+}
+
+async function startServerInternal(
+  python: string,
+  model: string,
+  onProgress?: (p: ServerProgress) => void,
+  skipPostLoadRepair = false
+): Promise<void> {
   if (serverProc && !serverProc.killed && currentModel === model) return
 
   // Kill existing server if running with different model
@@ -350,11 +371,27 @@ export async function startServer(
   // Estimate model loading time based on size (rough: ~60MB/s on Apple Silicon)
   const estimatedLoadTimeSeconds = Math.ceil(modelSizeBytes / 60_000_000)
 
-  console.log(`[mlx] Starting server: ${python} -m mlx_lm server --model ${model} --port ${MLX_PORT}`)
+  const serverArgs = [
+    '-m',
+    'mlx_lm',
+    'server',
+    '--model',
+    model,
+    '--port',
+    String(MLX_PORT),
+    '--prompt-cache-size',
+    '0',
+    '--decode-concurrency',
+    '1',
+    '--prompt-concurrency',
+    '1'
+  ]
+
+  console.log(`[mlx] Starting server: ${python} ${serverArgs.join(' ')}`)
 
   serverProc = spawn(
     python,
-    ['-m', 'mlx_lm', 'server', '--model', model, '--port', String(MLX_PORT)],
+    serverArgs,
     {
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -442,7 +479,7 @@ export async function startServer(
           progress: 0.98
         })
         await stopServer()
-        await startServer(python, model, onProgress, true)
+        await startServerInternal(python, model, onProgress, true)
       }
     } catch (e) {
       console.warn('[mlx] Post-download model repair failed (non-critical):', (e as Error).message)
@@ -664,13 +701,10 @@ export async function* chatStream(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model: opts.model,
-      messages: opts.messages.map((m) => ({
-        role: m.role,
-        content: m.content
-      })),
+      messages: formatMessagesForMLX(opts.messages),
       stream: true,
       temperature: opts.temperature ?? 0.7,
-      max_tokens: 8192
+      max_tokens: 2048
     }),
     signal: opts.signal
   })

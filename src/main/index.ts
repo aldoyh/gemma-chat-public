@@ -34,6 +34,18 @@ import {
 } from './workspace'
 import type { ChatRequest, StreamChunk, ToolCall, ModelConfig } from '../shared/types'
 
+// Single instance lock — prevents multiple app instances from running simultaneously
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+}
+
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  }
+})
+
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
