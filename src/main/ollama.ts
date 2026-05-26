@@ -8,8 +8,10 @@ export interface OllamaModelEntry {
 
 export async function isOllamaRunning(): Promise<boolean> {
   try {
-    const res = await fetch(`${OLLAMA_BASE_URL}/v1/models`, { signal: AbortSignal.timeout(2000) })
-    return res.ok
+    const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { signal: AbortSignal.timeout(2000) })
+    if (!res.ok) return false
+    const data = (await res.json()) as { models?: unknown }
+    return Array.isArray(data.models)
   } catch {
     return false
   }

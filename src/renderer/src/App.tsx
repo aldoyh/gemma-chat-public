@@ -51,19 +51,21 @@ function AppContent() {
         })
       })
 
-      // 1. Check Ollama first — if running, skip setup wizard entirely
+      // 1. Check Ollama first. Do not auto-start a model from boot; local models
+      // can be large enough to lock up the machine if selected accidentally.
       const { running } = await window.api.checkOllama()
       if (running) {
         const ollamaModels = await window.api.listOllamaModels()
-        const firstModel = ollamaModels[0]?.name ?? 'gemma3:4b'
-        const ollamaConfig: ModelConfig = { source: 'ollama', model: firstModel }
-        setState({
-          phase: 'setup',
-          status: { stage: 'starting-mlx', message: 'Connecting to Ollama…' },
-          modelConfig: ollamaConfig
-        })
-        window.api.startSetup(ollamaConfig)
-        return
+        const firstModel = ollamaModels[0]?.name
+        if (firstModel) {
+          const ollamaConfig: ModelConfig = { source: 'ollama', model: firstModel }
+          setState({
+            phase: 'setup',
+            status: { stage: 'checking', message: 'Welcome' },
+            modelConfig: ollamaConfig
+          })
+          return
+        }
       }
 
       // 2. Fall back to original MLX check

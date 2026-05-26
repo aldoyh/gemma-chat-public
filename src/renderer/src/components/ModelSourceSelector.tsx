@@ -63,6 +63,7 @@ export default function ModelSourceSelector({ modelConfig, onConfigChange, disab
 
         {/* Ollama option */}
         <button
+          type="button"
           onClick={() => onConfigChange({ source: 'ollama', model: ollamaModels[0]?.name })}
           disabled={disabled}
           className={btn(modelConfig.source === 'ollama')}
@@ -80,6 +81,7 @@ export default function ModelSourceSelector({ modelConfig, onConfigChange, disab
               value={modelConfig.model || ''}
               onChange={(e) => onConfigChange({ source: 'ollama', model: e.target.value })}
               disabled={disabled || ollamaLoading}
+              title="Select Ollama model"
               className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
             >
               {ollamaLoading && <option value="">Loading…</option>}
@@ -91,6 +93,7 @@ export default function ModelSourceSelector({ modelConfig, onConfigChange, disab
               ))}
             </select>
             <button
+              type="button"
               onClick={refreshOllama}
               disabled={disabled || ollamaLoading}
               title="Refresh Ollama model list"
@@ -114,6 +117,7 @@ export default function ModelSourceSelector({ modelConfig, onConfigChange, disab
 
         {/* MLX (HuggingFace download) option */}
         <button
+          type="button"
           onClick={() => onConfigChange({ source: 'mlx', model: modelConfig.model || DEFAULT_MODEL })}
           disabled={disabled}
           className={btn(modelConfig.source === 'mlx')}
@@ -127,10 +131,11 @@ export default function ModelSourceSelector({ modelConfig, onConfigChange, disab
             value={modelConfig.model || DEFAULT_MODEL}
             onChange={(e) => onConfigChange({ source: 'mlx', model: e.target.value })}
             disabled={disabled}
+            title="Select MLX model"
             className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
           >
             {AVAILABLE_MODELS.map((m) => (
-              <option key={m.name} value={m.name}>
+              <option key={m.name} value={m.name} disabled={m.requiresManualOverride}>
                 {m.label} ({m.size})
               </option>
             ))}
@@ -139,6 +144,7 @@ export default function ModelSourceSelector({ modelConfig, onConfigChange, disab
 
         {/* GGUF (local file) option */}
         <button
+          type="button"
           onClick={() => onConfigChange({ source: 'gguf', path: ggufPath })}
           disabled={disabled}
           className={btn(modelConfig.source === 'gguf')}
@@ -150,6 +156,7 @@ export default function ModelSourceSelector({ modelConfig, onConfigChange, disab
         {modelConfig.source === 'gguf' && (
           <div className="space-y-2">
             <button
+              type="button"
               onClick={selectGGUFFile}
               disabled={disabled}
               className="w-full rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-sm hover:bg-white/20"

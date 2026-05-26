@@ -313,3 +313,65 @@ textarea,
 .anim-stagger > *:nth-child(4) { animation-delay: 120ms; }
 .anim-stagger > *:nth-child(5) { animation-delay: 160ms; }
 .anim-stagger > *:nth-child(6) { animation-delay: 200ms; }
+
+@keyframes gemma-logo-breathe {
+  0%,
+  100% {
+    transform: scale(1) translateY(0);
+    filter: brightness(0.96);
+  }
+  50% {
+    transform: scale(1.05) translateY(-1px);
+    filter: brightness(1.08);
+  }
+}
+
+@keyframes gemma-logo-spin {
+  from {
+    transform: rotate(0deg) scale(1.04);
+  }
+  to {
+    transform: rotate(360deg) scale(1.04);
+  }
+}
+
+@keyframes gemma-logo-listen {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.24);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 6px rgba(255, 255, 255, 0);
+  }
+}
+
+.gemma-chatbox-logo-wrap {
+  height: 2.25rem;
+  width: 2.25rem;
+  flex-shrink: 0;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gemma-chatbox-logo {
+  height: 1.4rem;
+  width: 1.4rem;
+  border-radius: 9999px;
+  object-fit: cover;
+  animation: gemma-logo-breathe 2.4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.gemma-chatbox-logo.is-streaming {
+  animation: gemma-logo-spin 1.7s linear infinite;
+}
+
+.gemma-chatbox-logo.is-listening {
+  animation: gemma-logo-listen 1.25s ease-in-out infinite;
+}

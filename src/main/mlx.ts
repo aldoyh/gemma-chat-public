@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { spawn, ChildProcess, spawnSync } from 'child_process'
 import { join } from 'path'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { totalmem } from 'os'
 import { AVAILABLE_MODELS } from '../shared/types'
 import { formatMessagesForMLX } from './inference/message-format'
 
@@ -12,6 +13,8 @@ export const MLX_URL = `http://${MLX_HOST}`
 let serverProc: ChildProcess | null = null
 let currentModel: string | null = null
 let serverStartPromise: Promise<void> | null = null
+
+const BYTES_PER_GIB = 1024 ** 3
 
 // ---------------------------------------------------------------------------
 // Paths — everything lives under <appData>/mlx/
@@ -338,6 +341,8 @@ async function startServerInternal(
 ): Promise<void> {
   if (serverProc && !serverProc.killed && currentModel === model) return
 
+  assertSafeLocalModelLoad(model)
+
   // Kill existing server if running with different model
   await stopServer()
 
@@ -485,6 +490,18 @@ async function startServerInternal(
       console.warn('[mlx] Post-download model repair failed (non-critical):', (e as Error).message)
     }
   }
+}
+
+function assertSafeLocalModelLoad(model: string): void {
+  const info = AVAILABLE_MODELS.find((m) => m.name === model)
+  if (!info?.requiresManualOverride) return
+  if (process.env.GEMMA_CHAT_ALLOW_LARGE_MODELS === '1') return
+
+  const systemMemoryGiB = Math.round(totalmem() / BYTES_PER_GIB)
+  throw new Error(
+    `${info.label} is disabled by default because it can saturate memory and hang this Mac (${systemMemoryGiB} GB RAM). ` +
+    'Use Gemma 2 2B or Gemma 4 E2B/E4B, or set GEMMA_CHAT_ALLOW_LARGE_MODELS=1 if you intentionally want to test it.'
+  )
 }
 
 /**

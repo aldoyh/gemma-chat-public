@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { transcribeAudioBlob } from '../lib/whisper'
+import gemmaLogoUrl from '../assets/gemma-logo.png'
 
 interface Props {
   onSend: (text: string) => void
@@ -136,6 +137,8 @@ export default function Composer({
   }
 
   const canSend = text.trim().length > 0 && !disabled && recState === 'idle'
+  const logoStateClass =
+    streaming ? 'is-streaming' : recState === 'recording' ? 'is-listening' : ''
 
   return (
     <div className="shrink-0 px-6 pb-6 pt-2">
@@ -147,6 +150,13 @@ export default function Composer({
             onClick={onMicClick}
             disabled={streaming || disabled}
           />
+          <div className="gemma-chatbox-logo-wrap" aria-hidden="true">
+            <img
+              src={gemmaLogoUrl}
+              alt=""
+              className={`gemma-chatbox-logo ${logoStateClass}`}
+            />
+          </div>
           <textarea
             ref={taRef}
             data-composer

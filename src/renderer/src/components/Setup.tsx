@@ -169,11 +169,17 @@ function WelcomeScreen({
               {AVAILABLE_MODELS.map((m) => (
                 <button
                   key={m.name}
+                  disabled={m.requiresManualOverride}
                   onClick={() => {
+                    if (m.requiresManualOverride) return
                     onConfigChange({ source: 'mlx', model: m.name })
                     setShowNotification(false)
                   }}
                   className={`anim-fade-up group relative w-full rounded-xl border px-4 py-3 text-left transition active:scale-[0.99] ${
+                    m.requiresManualOverride
+                      ? 'cursor-not-allowed opacity-45'
+                      : ''
+                  } ${
                     modelConfig.model === m.name
                       ? 'border-white/25 bg-white/[0.06]'
                       : 'border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]'
@@ -185,6 +191,11 @@ function WelcomeScreen({
                       {m.recommended && (
                         <span className="rounded-full bg-white/10 px-2 py-[1px] text-[10px] font-medium uppercase tracking-wider text-ink-100">
                           Recommended
+                        </span>
+                      )}
+                      {m.requiresManualOverride && (
+                        <span className="rounded-full bg-red-500/15 px-2 py-[1px] text-[10px] font-medium uppercase tracking-wider text-red-100">
+                          Disabled
                         </span>
                       )}
                     </div>

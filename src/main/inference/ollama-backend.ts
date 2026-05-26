@@ -38,6 +38,10 @@ export class OllamaBackend implements InferenceBackend {
   ): Promise<void> {
     const running = await isOllamaRunning()
     if (!running) throw new Error('Ollama is not running')
+    const models = await this.listModels()
+    if (!models.includes(modelName)) {
+      throw new Error(`Ollama model "${modelName}" is not installed or this is not a compatible Ollama server.`)
+    }
     this.currentModel = modelName
   }
 
@@ -66,7 +70,8 @@ export class OllamaBackend implements InferenceBackend {
           content: m.content
         })),
         stream: true,
-        temperature: opts.temperature ?? 0.7
+        temperature: opts.temperature ?? 0.7,
+        max_tokens: 2048
       }),
       signal: opts.signal
     })

@@ -88,6 +88,7 @@ export interface ModelInfo {
   sizeBytes: number
   description: string
   recommended?: boolean
+  requiresManualOverride?: boolean
 }
 
 export const AVAILABLE_MODELS: ModelInfo[] = [
@@ -118,14 +119,16 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
     label: 'Gemma 4 27B MoE',
     size: '16 GB',
     sizeBytes: 16_000_000_000,
-    description: 'Experimental MoE model. 16GB+ RAM recommended.'
+    description: 'High-risk local load. Disabled unless GEMMA_CHAT_ALLOW_LARGE_MODELS=1 is set.',
+    requiresManualOverride: true
   },
   {
     name: 'mlx-community/gemma-4-31b-it-4bit',
     label: 'Gemma 4 31B',
     size: '18 GB',
     sizeBytes: 18_000_000_000,
-    description: 'Experimental dense model. 32GB+ RAM recommended.'
+    description: 'High-risk local load. Disabled unless GEMMA_CHAT_ALLOW_LARGE_MODELS=1 is set.',
+    requiresManualOverride: true
   }
 ]
 
