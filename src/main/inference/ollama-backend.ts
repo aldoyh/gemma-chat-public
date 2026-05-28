@@ -71,7 +71,8 @@ export class OllamaBackend implements InferenceBackend {
         })),
         stream: true,
         temperature: opts.temperature ?? 0.7,
-        max_tokens: 2048
+        max_tokens: 2048,
+        repeat_penalty: 1.15
       }),
       signal: opts.signal
     })

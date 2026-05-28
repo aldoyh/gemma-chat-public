@@ -4,7 +4,7 @@ export type InferenceChatMessage = {
 }
 
 export type MLXCompatibleMessage = {
-  role: 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant'
   content: string
 }
 
@@ -35,13 +35,20 @@ export function formatMessagesForMLX(
 ): MLXCompatibleMessage[] {
   const formatted: MLXCompatibleMessage[] = []
   let pendingUserContent: string[] = []
+  let systemEmitted = false
 
   for (const message of messages) {
     const content = message.content.trim()
     if (!content) continue
 
     if (message.role === 'system') {
-      pendingUserContent.push(`System instructions:\n${content}`)
+      if (!systemEmitted && formatted.length === 0) {
+        // First message: send as real system role so Gemma template can use it
+        formatted.push({ role: 'system', content })
+        systemEmitted = true
+      } else {
+        pendingUserContent.push(`System note:\n${content}`)
+      }
       continue
     }
 

@@ -407,10 +407,12 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
         throw new Error('No inference backend available. Call handleSetup first.')
       }
 
+      const genTemp = req.mode === 'code' ? 0.45 : 0.75
       streamLoop: for await (const chunk of backend.chat({
         model: req.model,
         messages: baseMessages,
-        signal: abort.signal
+        signal: abort.signal,
+        temperature: genTemp
       })) {
         if (chunk.content) {
           if (firstToken) {
@@ -470,7 +472,9 @@ async function handleChat(req: ChatRequest, channel: string): Promise<void> {
 
           emitActivity()
 
+          let parseIters = 0
           while (true) {
+            if (++parseIters > 64) break // safety against malformed model output causing parse loops
             if (!useTools) {
               // No tool parsing: stream tokens as they arrive
               if (emittedIdx < buffer.length) {

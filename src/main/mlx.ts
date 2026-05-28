@@ -721,7 +721,9 @@ export async function* chatStream(
       messages: formatMessagesForMLX(opts.messages),
       stream: true,
       temperature: opts.temperature ?? 0.7,
-      max_tokens: 2048
+      max_tokens: 2048,
+      repetition_penalty: 1.15,
+      repeat_last_n: 64
     }),
     signal: opts.signal
   })

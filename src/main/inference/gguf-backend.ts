@@ -161,6 +161,7 @@ export class GGUFBackend implements InferenceBackend {
       const promptPromise = session.promptWithMeta(lastUserMsg.content, {
         temperature: opts.temperature ?? 0.7,
         signal: opts.signal,
+        repeatPenalty: { penalty: 1.15, frequencyPenalty: 0.0, presencePenalty: 0.0, lastTokens: 64 },
         onTextChunk: (text: string) => {
           chunkQueue.push(text)
           notifyNext?.()

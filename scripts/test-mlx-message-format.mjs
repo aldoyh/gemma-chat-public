@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { formatMessagesForMLX } from '../dist-test/message-format.mjs'
 
+console.log('Running updated MLX message format test (post-fix expectations)...')
+
 const formatted = formatMessagesForMLX([
   { role: 'system', content: 'You are concise.' },
   { role: 'user', content: 'What is 2+2?' },
@@ -9,28 +11,28 @@ const formatted = formatMessagesForMLX([
   { role: 'user', content: 'Say it as a word.' }
 ])
 
+// After the fix we intentionally preserve a leading system role (better for Gemma)
 assert.deepEqual(
   formatted.map((m) => m.role),
-  ['user', 'assistant', 'user'],
-  'Gemma chat messages must start with user and alternate user/assistant'
+  ['system', 'user', 'assistant', 'user'],
+  'Leading system should be preserved; then user/assistant alternation'
+)
+
+assert.ok(
+  formatted[0].content.includes('You are concise.'),
+  'Leading system content must be passed through cleanly to the model'
 )
 
 assert.match(
-  formatted[0].content,
-  /System instructions:\nYou are concise\.\n\nWhat is 2\+2\?/,
-  'leading system instructions should be folded into the first user turn'
-)
-
-assert.match(
-  formatted[2].content,
+  formatted[formatted.length - 1].content,
   /Tool result:\n\[ok\] calculator: 4\n\nSay it as a word\./,
   'tool results should be folded into the next user turn'
 )
 
 assert.equal(
-  formatted.some((m) => m.role === 'system' || m.role === 'tool'),
+  formatted.some((m) => m.role === 'tool'),
   false,
-  'MLX server should never receive unsupported system/tool roles'
+  'MLX server should never receive raw tool roles'
 )
 
-console.log('mlx message format tests passed')
+console.log('mlx message format tests passed (new correct behavior)')

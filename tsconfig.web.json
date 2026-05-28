@@ -7,7 +7,10 @@
     "src/shared/**/*"
   ],
   "compilerOptions": {
-    "ignoreDeprecations": "6.0",
+    "ignoreDeprecations": "5.0",
+    "module": "esnext",
+    "target": "esnext",
+    "moduleResolution": "node",
     "composite": true,
     "baseUrl": ".",
     "paths": {
