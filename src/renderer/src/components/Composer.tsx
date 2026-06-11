@@ -19,7 +19,7 @@ export default function Composer({
   streaming,
   disabled,
   placeholder,
-  model: _model
+  model
 }: Props) {
   const [text, setText] = useState('')
   const [recState, setRecState] = useState<RecState>('idle')
@@ -140,10 +140,34 @@ export default function Composer({
   const logoStateClass =
     streaming ? 'is-streaming' : recState === 'recording' ? 'is-listening' : ''
 
+  const modelLabel = shortenModelName(model)
+
   return (
-    <div className="shrink-0 px-6 pb-6 pt-2">
-      <div className="mx-auto max-w-3xl">
-        <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-2 shadow-lg shadow-black/40 focus-within:border-white/20">
+    <div className="shrink-0 px-3 pb-4 pt-2 sm:px-6 sm:pb-6">
+      <div className="mx-auto w-full max-w-3xl">
+        <div className="mb-2 flex items-center justify-between gap-3 text-[11px] text-ink-400">
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex h-2 w-2 rounded-full ${
+                streaming ? 'bg-white' : recState === 'recording' ? 'bg-red-400' : 'bg-emerald-400'
+              }`}
+            />
+            <span>
+              {streaming
+                ? 'Responding live'
+                : recState === 'recording'
+                  ? 'Voice capture active'
+                  : recState === 'transcribing'
+                    ? 'Transcribing locally'
+                    : 'Ready'}
+            </span>
+          </div>
+          <div className="hidden rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10.5px] text-ink-300 sm:inline-flex">
+            {modelLabel}
+          </div>
+        </div>
+
+        <div className="surface-panel-strong flex items-end gap-1.5 rounded-[28px] p-1.5 sm:gap-2 sm:p-2">
           <MicButton
             state={recState}
             seconds={recordSeconds}
@@ -178,7 +202,7 @@ export default function Composer({
             <button
               onClick={onStop}
               aria-label="Stop"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-ink-900 transition hover:bg-white/90"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-ink-900 shadow-[0_8px_24px_rgba(255,255,255,0.18)] transition hover:bg-white/90"
             >
               <svg viewBox="0 0 12 12" className="h-3 w-3" fill="currentColor">
                 <rect x="2" y="2" width="8" height="8" rx="1" />
@@ -189,7 +213,7 @@ export default function Composer({
               onClick={submit}
               disabled={!canSend}
               aria-label="Send"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-ink-900 transition hover:bg-white/90 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-ink-400"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-ink-900 shadow-[0_8px_24px_rgba(255,255,255,0.18)] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-ink-400"
             >
               <svg viewBox="0 0 16 16" className="h-4 w-4" fill="currentColor">
                 <path d="M2 8l12-6-4 14-2-6-6-2z" />
@@ -197,7 +221,18 @@ export default function Composer({
             </button>
           )}
         </div>
-        <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-ink-400">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-400">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-white/8 bg-white/[0.03] px-2.5 py-1 text-[10px] text-ink-300">
+              Enter to send
+            </span>
+            <span className="rounded-full border border-white/8 bg-white/[0.03] px-2.5 py-1 text-[10px] text-ink-300">
+              Shift + Enter newline
+            </span>
+            <span className="rounded-full border border-white/8 bg-white/[0.03] px-2.5 py-1 text-[10px] text-ink-300">
+              Voice input
+            </span>
+          </div>
           {recordError ? (
             <span className="text-red-400/90">{recordError}</span>
           ) : recState === 'recording' ? (
@@ -213,7 +248,7 @@ export default function Composer({
           ) : recState === 'transcribing' ? (
             <span className="shimmer-text">Transcribing locally…</span>
           ) : (
-            <span>Enter to send · Shift+Enter for newline · mic for voice</span>
+            <span className="hidden sm:inline">Local model: {modelLabel}</span>
           )}
         </div>
       </div>
@@ -291,3 +326,8 @@ function pickMime(): string | undefined {
   return undefined
 }
 
+function shortenModelName(model: string): string {
+  const parts = model.split('/')
+  const tail = parts[parts.length - 1] ?? model
+  return tail.replace(/^mlx-community-/, '').replace(/-4bit$/i, '').replace(/-/g, ' ')
+}

@@ -35,20 +35,40 @@ Everything happens locally. The model runs via [MLX-LM](https://github.com/ml-ex
 
 - 🛠 **Build Mode** — Coding agent with a live preview canvas. Writes multi-file projects into a sandboxed workspace.
 - 💬 **Chat Mode** — Conversational AI with tool use (web search, URL fetch, calculator, bash).
-- 🔄 **Model Switching** — Hot-swap between 4 Gemma variants on the fly.
+- 🔄 **Model Switching** — Hot-swap between Gemma 2, Gemma 4 (E2B/E4B/**12B**/27B/31B), or any local Ollama model.
 - 🎤 **Voice Input** — Local speech-to-text via in-browser Whisper.
 - ✈️ **Works Offline** — After the one-time model download, everything runs without internet.
-- 💾 **Zero Config** — Python venv + MLX runtime auto-provisions on first launch.
+- 💾 **Zero Config** — Python venv + MLX runtime auto-provisions on first launch (MLX path), or just point at a running Ollama.
+- 📱 **Responsive** — Sidebar collapses, canvas slides over chat on narrow windows; works from 720 px up.
 
 ## Available Models
 
 | Model | Size | Best For |
 |---|---|---|
-| **Gemma 2 2B** | **~1.5 GB** | **Recommended default.** Stable and reliable. |
-| Gemma 4 E2B | ~1.5 GB | Experimental manual opt-in |
-| Gemma 4 E4B | ~3 GB | Experimental manual opt-in |
+| **Gemma 2 2B** (MLX) | **~1.5 GB** | **Recommended default.** Stable, fast, runs anywhere. |
+| **Gemma 4 12B** (MLX or Ollama) | **~8–10 GB** | **New.** Best balance of quality vs. speed. Recommended for coding. |
+| Gemma 4 E2B (MLX) | ~1.5 GB | Experimental manual opt-in |
+| Gemma 4 E4B (MLX) | ~3 GB | Experimental manual opt-in |
 | Gemma 4 27B MoE | ~16 GB | Experimental, needs 16 GB+ RAM |
 | Gemma 4 31B | ~18 GB | Experimental, needs 32 GB+ RAM |
+| Any Ollama model | varies | Point at `gemma4:12b`, `qwen3.5:9b`, etc. on your local Ollama. |
+
+### Quick test with the new Gemma 4 12B via Ollama
+
+```bash
+# Pull the new 12B (MLX-quantized, ~10 GB)
+ollama pull gemma4:12b-mlx
+
+# Start the app — it auto-detects Ollama and lists gemma4:12b-mlx
+npm run dev
+```
+
+### Verified
+
+```bash
+npm test          # 26 unit tests across 7 sections, all pass
+npm run test:ollama   # live streaming smoke test against gemma4:12b-mlx
+```
 
 ## Getting Started
 
@@ -77,8 +97,8 @@ Produces a signed `.dmg` in `dist/`. Share it directly — recipients just drag 
 
 | Layer | Tech |
 |---|---|
-| App Shell | Electron + Vite + React 19 + TypeScript + Tailwind |
-| Model Runtime | MLX-LM (auto-installed into a local venv) |
+| App Shell | Electron 42 + Vite 7 + React 19 + TypeScript 6 + Tailwind 4 |
+| Model Runtime | MLX-LM (auto-installed into a local venv) **or** local Ollama |
 | Speech-to-Text | transformers.js (Whisper, runs in-browser via WASM) |
 | Workspace | Per-conversation sandboxed filesystem + local HTTP server |
 

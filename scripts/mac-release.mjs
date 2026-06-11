@@ -31,6 +31,8 @@ if (TARGET_DIR.startsWith('~/')) {
 }
 const TARGET_APP = join(TARGET_DIR, `${APP_NAME}.app`)
 
+const dryRun = process.argv.includes('--dry-run') || process.argv.includes('-d')
+
 const log = (msg) => console.log(`\n▶ ${msg}`)
 const success = (msg) => console.log(`✅ ${msg}`)
 const fail = (msg) => { console.error(`\n❌ ${msg}`); process.exit(1) }
@@ -72,6 +74,7 @@ function validateBundle(appPath) {
 
 console.log('╔════════════════════════════════════════════════════════════╗')
 console.log('║           Gemma Chat — macOS Release Pipeline              ║')
+if (dryRun) console.log('║                     [DRY RUN MODE]                         ║')
 console.log('╚════════════════════════════════════════════════════════════╝')
 
 // 1. LINT
@@ -89,35 +92,49 @@ validateBundle(PACKED_APP)
 // 4 + 5. SAFELY REPLACE IN APPLICATIONS FOLDER
 log('Step 4/5 — Safety checks before replacing installed app')
 
-if (isAppRunning()) {
-  fail(`${APP_NAME} appears to be running. Please quit it first, then re-run this command.`)
+if (isAppRunning() && !dryRun) {
+  fail(`${APP_NAME} appears to be running. Please quit it first, then re-run this command (or use --dry-run to test the pipeline).`)
 }
 
 if (existsSync(TARGET_APP)) {
-  console.log(`   Removing old version at ${TARGET_APP}...`)
-  try {
-    rmSync(TARGET_APP, { recursive: true, force: true })
-  } catch (e) {
-    fail(`Failed to remove old app: ${e.message}`)
+  if (dryRun) {
+    console.log(`   [DRY RUN] Would remove old app: ${TARGET_APP}`)
+  } else {
+    console.log(`   Removing old version at ${TARGET_APP}...`)
+    try {
+      rmSync(TARGET_APP, { recursive: true, force: true })
+    } catch (e) {
+      fail(`Failed to remove old app: ${e.message}`)
+    }
+    success('Old version removed')
   }
-  success('Old version removed')
 } else {
   console.log('   No previous installation found.')
 }
 
-// 5. COPY WITH DITTO (best practice for macOS .app bundles)
+// 5. COPY WITH DITTO
 log('Step 5/5 — Installing new version')
 console.log(`   Source:      ${PACKED_APP}`)
 console.log(`   Destination: ${TARGET_APP}`)
 
-const ditto = spawnSync('ditto', [PACKED_APP, TARGET_APP], { stdio: 'inherit' })
-if (ditto.status !== 0) {
-  fail('ditto copy failed')
+if (dryRun) {
+  console.log('   [DRY RUN] Skipping actual filesystem changes (rm + ditto)')
+  success('[DRY RUN] Pipeline simulation completed successfully')
+} else {
+  const ditto = spawnSync('ditto', [PACKED_APP, TARGET_APP], { stdio: 'inherit' })
+  if (ditto.status !== 0) {
+    fail('ditto copy failed')
+  }
+  success(`Installed to ${TARGET_APP}`)
 }
 
-success(`Installed to ${TARGET_APP}`)
-
 console.log('\n════════════════════════════════════════════════════════════')
-console.log('🎉  Release pipeline completed successfully!')
-console.log(`   You can now launch "${APP_NAME}" from /Applications (or Spotlight).`)
+if (dryRun) {
+  console.log('🎉  Dry run completed successfully!')
+  console.log('   No files were modified on your system.')
+  console.log('   Re-run without --dry-run when ready to install.')
+} else {
+  console.log('🎉  Release pipeline completed successfully!')
+  console.log(`   You can now launch "${APP_NAME}" from ${TARGET_DIR}`)
+}
 console.log('════════════════════════════════════════════════════════════\n')

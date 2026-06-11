@@ -51,7 +51,7 @@ export default function Message({
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="selectable max-w-[78%] rounded-2xl rounded-br-md bg-white/[0.08] px-4 py-2.5 text-[14.5px] leading-relaxed text-white">
+        <div className="selectable max-w-[88%] rounded-[22px] rounded-br-md border border-white/10 bg-white/[0.1] px-4 py-3 text-[14.5px] leading-relaxed text-white shadow-[0_12px_28px_rgba(0,0,0,0.24)] sm:max-w-[78%]">
           <div className="whitespace-pre-wrap">{message.content}</div>
         </div>
       </div>
@@ -65,8 +65,23 @@ export default function Message({
 
   return (
     <div className="group flex gap-3">
-      <img src={gemmaLogoUrl} alt="Gemma" className="mt-0.5 h-7 w-7 shrink-0 rounded-full object-cover" />
+      <img
+        src={gemmaLogoUrl}
+        alt="Gemma"
+        className="mt-0.5 h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-white/10"
+      />
       <div className="selectable min-w-0 flex-1">
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-ink-400">
+          <span className="font-medium text-white">Gemma</span>
+          {message.model && (
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-ink-300">
+              {shortModel(message.model)}
+            </span>
+          )}
+          <span className="hidden sm:inline">Local response</span>
+        </div>
+
+        <div className="surface-panel rounded-[24px] px-4 py-4">
         {parsed.thinking && (
           <ThinkingBlock content={parsed.thinking} inProgress={parsed.thinkingInProgress} />
         )}
@@ -99,21 +114,22 @@ export default function Message({
         )}
 
         {onRegenerate && (
-          <div className="mt-2 flex gap-1 opacity-0 transition group-hover:opacity-100">
+          <div className="mt-3 flex gap-2 opacity-0 transition group-hover:opacity-100">
             <button
               onClick={onRegenerate}
-              className="rounded-md px-2 py-1 text-[11px] text-ink-400 hover:bg-white/5 hover:text-white"
+              className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] text-ink-300 hover:bg-white/[0.07] hover:text-white"
             >
               ↻ Regenerate
             </button>
             <button
               onClick={() => navigator.clipboard.writeText(parsed.visible)}
-              className="rounded-md px-2 py-1 text-[11px] text-ink-400 hover:bg-white/5 hover:text-white"
+              className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] text-ink-300 hover:bg-white/[0.07] hover:text-white"
             >
               Copy
             </button>
           </div>
         )}
+        </div>
       </div>
     </div>
   )
@@ -224,6 +240,12 @@ function formatElapsed(sec: number): string {
   const m = Math.floor(sec / 60)
   const s = sec % 60
   return `${m}m ${s}s`
+}
+
+function shortModel(model: string): string {
+  const parts = model.split('/')
+  const tail = parts[parts.length - 1] ?? model
+  return tail.replace(/^mlx-community-/, '').replace(/-4bit$/i, '').replace(/-/g, ' ')
 }
 
 function ThinkingBlock({

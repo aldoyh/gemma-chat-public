@@ -157,8 +157,22 @@ function AppContent() {
 export default function App() {
   return (
     <I18nProvider>
-      <AppContent />
+      <div className="relative h-full w-full overflow-hidden">
+        <AppBackdrop />
+        <AppContent />
+      </div>
     </I18nProvider>
+  )
+}
+
+function AppBackdrop() {
+  return (
+    <div className="app-backdrop">
+      <div className="app-orb app-orb--one" />
+      <div className="app-orb app-orb--two" />
+      <div className="app-orb app-orb--three" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.08),_transparent_30%),radial-gradient(circle_at_50%_110%,_rgba(255,255,255,0.05),_transparent_24%)] opacity-80" />
+    </div>
   )
 }
 

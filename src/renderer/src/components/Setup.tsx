@@ -39,10 +39,10 @@ export default function Setup({ status, modelConfig, onConfigChange, onStart }: 
 
   return (
     <div className={`drag flex h-full w-full flex-col bg-gradient-to-b from-ink-950 via-ink-900 to-black ${language === 'ar' ? 'rtl' : ''}`}>
-      <div className="flex h-9 items-center justify-end px-8">
+      <div className="flex h-9 items-center justify-end px-4 sm:px-8">
         <LanguageSwitcher />
       </div>
-      <div className="flex flex-1 items-center justify-center px-8">
+      <div className="flex flex-1 items-center justify-center px-4 sm:px-8">
         <div className="no-drag w-full max-w-sm">
           {/* Logo with ambient glow */}
           <div className="mb-10 flex flex-col items-center text-center">
@@ -111,12 +111,23 @@ function WelcomeScreen({
 }) {
   const { t, language } = useI18n()
   const selected = AVAILABLE_MODELS.find((m) => m.name === modelConfig.model) ?? AVAILABLE_MODELS[0]
+  const selectedLabel =
+    modelConfig.source === 'ollama'
+      ? (modelConfig.model ?? 'Ollama')
+      : modelConfig.source === 'gguf'
+        ? (modelConfig.path?.split('/').pop() ?? 'Local GGUF')
+        : selected.label
+  const installNote =
+    modelConfig.source === 'ollama'
+      ? 'Uses your local Ollama server. No MLX download is needed.'
+      : modelConfig.source === 'gguf'
+        ? 'Uses the selected local GGUF file directly.'
+        : t.setup.installNote
   const [showNotification, setShowNotification] = useState(true)
 
-  const handleAutoSelect = () => {
+  const handleAutoStart = () => {
     setShowNotification(false)
-    const recommended = AVAILABLE_MODELS.find(m => m.recommended) ?? AVAILABLE_MODELS[0]
-    onStart({ source: 'mlx', model: recommended.name })
+    onStart(modelConfig)
   }
 
   const handleDismissNotification = () => {
@@ -127,17 +138,17 @@ function WelcomeScreen({
     <div className={`drag flex h-full w-full flex-col ${language === 'ar' ? 'rtl' : ''}`}>
       {showNotification && (
         <AutoSelectNotification
-          modelName={selected.label}
-          onAutoSelect={handleAutoSelect}
+          modelName={selectedLabel}
+          onAutoSelect={handleAutoStart}
           onDismiss={handleDismissNotification}
           duration={15}
         />
       )}
 
-      <div className="flex h-9 items-center justify-end px-8">
+      <div className="flex h-9 items-center justify-end px-4 sm:px-8">
         <LanguageSwitcher />
       </div>
-      <div className="flex flex-1 items-center justify-center px-8">
+      <div className="flex flex-1 items-center justify-center px-4 sm:px-8">
         <div className="no-drag w-full max-w-md">
           <div className="anim-fade-up mb-8 text-center">
             <GemmaLogo className="mx-auto mb-5 h-24 w-24" />
@@ -218,12 +229,14 @@ function WelcomeScreen({
           >
             {modelConfig.source === 'gguf' ? (
               <>{t.setup.download} from Local File</>
+            ) : modelConfig.source === 'ollama' ? (
+              <>Connect to {modelConfig.model ?? 'Ollama'}</>
             ) : (
               <>{t.setup.download} {selected.label} <span className="opacity-40 mx-1">·</span> {selected.size}</>
             )}
           </button>
           <p className={`mt-3 text-center text-[11px] text-ink-400 ${language === 'ar' ? 'font-tajawal' : ''}`}>
-            {t.setup.installNote}
+            {installNote}
           </p>
         </div>
       </div>

@@ -14,18 +14,12 @@ ${trimmed}`;
 function formatMessagesForMLX(messages) {
   const formatted = [];
   let pendingUserContent = [];
-  let systemEmitted = false;
   for (const message of messages) {
     const content = message.content.trim();
     if (!content) continue;
     if (message.role === "system") {
-      if (!systemEmitted && formatted.length === 0) {
-        formatted.push({ role: "system", content });
-        systemEmitted = true;
-      } else {
-        pendingUserContent.push(`System note:
+      pendingUserContent.push(`System instructions:
 ${content}`);
-      }
       continue;
     }
     if (message.role === "tool") {

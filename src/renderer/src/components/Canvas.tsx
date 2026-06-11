@@ -93,7 +93,7 @@ export default function Canvas({ conversationId, streaming, onClose }: Props) {
 
   return (
     <div className="flex h-full w-full flex-col border-l border-white/[0.06] bg-ink-950">
-      <div className="flex h-11 shrink-0 items-center gap-1 border-b border-white/[0.06] px-3">
+      <div className="flex h-11 shrink-0 items-center gap-1 border-b border-white/[0.06] px-2 sm:px-3">
         <div className="flex rounded-md bg-white/[0.04] p-0.5">
           <TabButton label="Preview" active={tab === 'preview'} onClick={() => setTab('preview')} />
           <TabButton

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AVAILABLE_MODELS, type AgentMode, type ChatMessage, type ToolCall, type StreamChunk, type ActivityState, type ModelConfig, type OllamaModelInfo } from '@shared/types'
-import gemmaLogoUrl from '../assets/gemma-logo.png'
 import Composer from './Composer'
 import Message from './Message'
 import Sidebar from './Sidebar'
 import Canvas from './Canvas'
 import ActivityIndicator from './ActivityIndicator'
+import { useBreakpoint } from '../lib/useViewport'
 
 interface Props {
   modelConfig: ModelConfig
@@ -23,6 +23,7 @@ interface Conversation {
 }
 
 const STORAGE_KEY = 'gemma-chat:conversations:v2'
+const SIDEBAR_KEY = 'gemma-chat:sidebar-collapsed'
 
 function loadConversations(): Conversation[] {
   try {
@@ -59,6 +60,7 @@ function newId(prefix: string): string {
 }
 
 export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: Props) {
+  const isWide = useBreakpoint('xl') ?? true
   const [conversations, setConversations] = useState<Conversation[]>(() => {
     const loaded = loadConversations()
     return loaded.length ? loaded : [newConversation()]
@@ -67,7 +69,22 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
   const [streaming, setStreaming] = useState(false)
   const [activityState, setActivityState] = useState<ActivityState>('idle')
   const [cpuPercent] = useState(0)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
   const streamRef = useRef<{ abort: boolean }>({ abort: false })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_KEY, sidebarCollapsed ? '1' : '0')
+    } catch {
+      // ignore
+    }
+  }, [sidebarCollapsed])
 
   // Extract model name for API calls
   const modelName =
@@ -84,6 +101,7 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
     () => conversations.find((c) => c.id === activeId) ?? conversations[0],
     [conversations, activeId]
   )
+  const messageCount = activeConversation.messages.length
 
   useEffect(() => {
     saveConversations(conversations)
@@ -258,9 +276,11 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
         conversations={conversations}
         activeId={activeId}
         modelConfig={modelConfig}
+        collapsed={sidebarCollapsed}
         onSelect={setActiveId}
         onNew={() => createConversation(activeConversation.mode)}
         onDelete={deleteConversation}
+        onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
       />
       <div className="flex min-w-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
@@ -268,17 +288,22 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
             modelConfig={modelConfig}
             mode={activeConversation.mode}
             canvasOpen={!!activeConversation.canvasOpen}
+            conversationTitle={activeConversation.title}
+            messageCount={messageCount}
             onToggleMode={toggleMode}
             onToggleCanvas={toggleCanvas}
             onSwitchModel={onSwitchModel}
             activityState={activityState}
             cpuPercent={cpuPercent}
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
           />
           <MessageList
             messages={activeConversation.messages}
             streaming={streaming}
             mode={activeConversation.mode}
             onRegenerate={handleRegenerate}
+            onQuickPrompt={handleSend}
           />
           <Composer
             onSend={handleSend}
@@ -293,8 +318,15 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
             }
           />
         </div>
-        {canvasVisible && (
+        {canvasVisible && isWide && (
           <ResizableCanvas
+            conversationId={activeId}
+            streaming={streaming}
+            onClose={() => updateActive((c) => ({ ...c, canvasOpen: false }))}
+          />
+        )}
+        {canvasVisible && !isWide && (
+          <CanvasOverlay
             conversationId={activeId}
             streaming={streaming}
             onClose={() => updateActive((c) => ({ ...c, canvasOpen: false }))}
@@ -330,7 +362,7 @@ function ResizableCanvas({
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragging.current) return
     const delta = startX.current - e.clientX
-    const next = Math.max(320, Math.min(startW.current + delta, 900))
+    const next = Math.max(280, Math.min(startW.current + delta, Math.min(900, window.innerWidth - 480)))
     setWidth(next)
   }, [])
 
@@ -360,24 +392,60 @@ function ResizableCanvas({
   )
 }
 
+function CanvasOverlay({
+  conversationId,
+  streaming,
+  onClose
+}: {
+  conversationId: string
+  streaming: boolean
+  onClose: () => void
+}) {
+  return (
+    <div
+      className="anim-fade-in fixed inset-0 z-40 flex items-stretch justify-end bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="anim-slide-right relative h-full w-full max-w-[640px] bg-ink-950 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Canvas
+          conversationId={conversationId}
+          streaming={streaming}
+          onClose={onClose}
+        />
+      </div>
+    </div>
+  )
+}
+
 function Header({
   modelConfig,
   mode,
   canvasOpen,
+  conversationTitle,
+  messageCount,
   onToggleMode,
   onToggleCanvas,
   onSwitchModel,
   activityState,
-  cpuPercent
+  cpuPercent,
+  sidebarCollapsed,
+  onToggleSidebar
 }: {
   modelConfig: ModelConfig
   mode: AgentMode
   canvasOpen: boolean
+  conversationTitle: string
+  messageCount: number
   onToggleMode: () => void
   onToggleCanvas: () => void
   onSwitchModel: (config: ModelConfig) => void
   activityState: ActivityState
   cpuPercent: number
+  sidebarCollapsed: boolean
+  onToggleSidebar: () => void
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [ollamaModels, setOllamaModels] = useState<OllamaModelInfo[]>([])
@@ -415,57 +483,129 @@ function Header({
     modelConfig.source === 'ollama' ? 'bg-emerald-400' :
     modelConfig.source === 'mlx' ? 'bg-blue-400' : 'bg-orange-400'
 
+  const activityLabel =
+    activityState === 'thinking'
+      ? 'Thinking'
+      : activityState === 'generating'
+        ? 'Responding'
+        : activityState === 'loading'
+          ? 'Loading model'
+          : 'Idle'
+
   return (
-    <div className="drag flex h-11 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
-      <div className="min-w-[8rem]" />
-      <div className="no-drag flex items-center gap-4">
-        <div className="flex items-center gap-1 rounded-lg bg-white/[0.04] p-0.5 text-[12px]">
-          <ModePill active={mode === 'chat'} onClick={() => mode === 'code' && onToggleMode()}>
-            Chat
-          </ModePill>
-          <ModePill active={mode === 'code'} onClick={() => mode === 'chat' && onToggleMode()}>
-            Build
-          </ModePill>
-        </div>
-        <ActivityIndicator state={activityState} cpuPercent={cpuPercent} />
-      </div>
-      <div className="no-drag flex shrink-0 items-center justify-end gap-2">
-        <div className="relative" ref={pickerRef}>
-          <button
-            onClick={() => setPickerOpen((o) => !o)}
-            className="flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-[11.5px] text-ink-400 transition-all duration-200 hover:bg-white/[0.05] hover:text-ink-100"
-          >
-            <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotColor}`} />
-            {currentLabel}
-            <svg viewBox="0 0 16 16" className={`h-3 w-3 transition-transform duration-200 ${pickerOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          {pickerOpen && (
-            <div className="anim-fade-scale absolute right-0 top-full z-50 mt-1 w-64 rounded-xl border border-white/10 bg-[#1a1a1a] p-1.5 shadow-2xl backdrop-blur-xl">
-              <div className="mb-1 px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-ink-400">
-                Switch model
+    <div className="drag flex flex-col gap-3 border-b border-white/[0.08] bg-black/30 px-3 py-3 sm:px-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="no-drag flex min-w-0 items-start gap-2">
+          {sidebarCollapsed && (
+            <button
+              onClick={onToggleSidebar}
+              title="Expand sidebar"
+              className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-400 transition hover:bg-white/5 hover:text-white"
+            >
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M6 4l4 4-4 4M3 4v8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <div className="truncate text-[15px] font-semibold tracking-tight text-white sm:text-[16px]">
+                {conversationTitle}
               </div>
-              {modelConfig.source === 'ollama' ? (
-                ollamaModels.length === 0 ? (
-                  <div className="px-2.5 py-2 text-[12px] text-ink-400">No Ollama models found</div>
+              <span className={`hidden h-1.5 w-1.5 rounded-full sm:inline-block ${dotColor}`} />
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-ink-400">
+              <span>{messageCount} message{messageCount === 1 ? '' : 's'}</span>
+              <span className="h-1 w-1 rounded-full bg-white/20" />
+              <span>{mode === 'code' ? 'Build workspace' : 'Chat workspace'}</span>
+              <span className="hidden h-1 w-1 rounded-full bg-white/20 sm:inline-block" />
+              <span className="hidden sm:inline">{activityLabel}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="no-drag hidden items-center gap-2 lg:flex">
+          <ActivityIndicator state={activityState} cpuPercent={cpuPercent} />
+          <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] p-0.5 text-[12px]">
+            <ModePill active={mode === 'chat'} onClick={() => mode === 'code' && onToggleMode()}>
+              Chat
+            </ModePill>
+            <ModePill active={mode === 'code'} onClick={() => mode === 'chat' && onToggleMode()}>
+              Build
+            </ModePill>
+          </div>
+        </div>
+
+        <div className="no-drag flex shrink-0 items-center justify-end gap-2">
+          <div className="relative" ref={pickerRef}>
+            <button
+              onClick={() => setPickerOpen((o) => !o)}
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1.5 text-[11.5px] text-ink-300 transition-all duration-200 hover:border-white/15 hover:bg-white/[0.07] hover:text-white"
+            >
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotColor}`} />
+              {currentLabel}
+              <svg viewBox="0 0 16 16" className={`h-3 w-3 transition-transform duration-200 ${pickerOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {pickerOpen && (
+              <div className="anim-fade-scale surface-panel-strong absolute right-0 top-full z-50 mt-1 w-72 rounded-[20px] p-1.5">
+                <div className="mb-1 px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-ink-400">
+                  Switch model
+                </div>
+                {modelConfig.source === 'ollama' ? (
+                  ollamaModels.length === 0 ? (
+                    <div className="px-2.5 py-2 text-[12px] text-ink-400">No Ollama models found</div>
+                  ) : (
+                    ollamaModels.map((m) => (
+                      <button
+                        key={m.name}
+                        onClick={() => {
+                          setPickerOpen(false)
+                          if (m.name !== modelName) onSwitchModel({ source: 'ollama', model: m.name })
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2.5 text-left transition-all duration-150 ${
+                          m.name === modelName
+                            ? 'bg-white/[0.08] text-white'
+                            : 'text-ink-200 hover:bg-white/[0.05]'
+                        }`}
+                      >
+                        <div>
+                          <div className="text-[12.5px] font-medium">{m.label || m.name}</div>
+                          {m.size && <div className="mt-0.5 text-[11px] text-ink-400">{m.size}</div>}
+                        </div>
+                        {m.name === modelName && (
+                          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </button>
+                    ))
+                  )
                 ) : (
-                  ollamaModels.map((m) => (
+                  AVAILABLE_MODELS.map((m) => (
                     <button
                       key={m.name}
                       onClick={() => {
                         setPickerOpen(false)
-                        if (m.name !== modelName) onSwitchModel({ source: 'ollama', model: m.name })
+                        if (m.name !== modelName) onSwitchModel({ source: 'mlx', model: m.name })
                       }}
-                      className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition-all duration-150 ${
+                      className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2.5 text-left transition-all duration-150 ${
                         m.name === modelName
-                          ? 'bg-white/[0.07] text-white'
-                          : 'text-ink-200 hover:bg-white/[0.04]'
+                          ? 'bg-white/[0.08] text-white'
+                          : 'text-ink-200 hover:bg-white/[0.05]'
                       }`}
                     >
                       <div>
-                        <div className="text-[12.5px] font-medium">{m.label || m.name}</div>
-                        {m.size && <div className="mt-0.5 text-[11px] text-ink-400">{m.size}</div>}
+                        <div className="flex items-center gap-1.5 text-[12.5px] font-medium">
+                          {m.label}
+                          {m.recommended && (
+                            <span className="rounded-full bg-white/10 px-1.5 py-[1px] text-[9px] font-medium uppercase tracking-wider text-ink-200">
+                              rec
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-ink-400">{m.size}</div>
                       </div>
                       {m.name === modelName && (
                         <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2">
@@ -474,57 +614,40 @@ function Header({
                       )}
                     </button>
                   ))
-                )
-              ) : (
-                AVAILABLE_MODELS.map((m) => (
-                  <button
-                    key={m.name}
-                    onClick={() => {
-                      setPickerOpen(false)
-                      if (m.name !== modelName) onSwitchModel({ source: 'mlx', model: m.name })
-                    }}
-                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition-all duration-150 ${
-                      m.name === modelName
-                        ? 'bg-white/[0.07] text-white'
-                        : 'text-ink-200 hover:bg-white/[0.04]'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5 text-[12.5px] font-medium">
-                        {m.label}
-                        {m.recommended && (
-                          <span className="rounded-full bg-white/10 px-1.5 py-[1px] text-[9px] font-medium uppercase tracking-wider text-ink-200">
-                            rec
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-ink-400">{m.size}</div>
-                    </div>
-                    {m.name === modelName && (
-                      <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </button>
-                ))
-              )}
-            </div>
+                )}
+              </div>
+            )}
+          </div>
+          {mode === 'code' && (
+            <button
+              onClick={onToggleCanvas}
+              title={canvasOpen ? 'Hide canvas' : 'Show canvas'}
+              className={`flex h-8 w-8 items-center justify-center rounded-full border transition ${
+                canvasOpen ? 'border-white/15 bg-white/10 text-white' : 'border-white/8 bg-white/[0.03] text-ink-400 hover:border-white/15 hover:bg-white/[0.06] hover:text-white'
+              }`}
+            >
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="2" y="3" width="12" height="10" rx="1.5" />
+                <path d="M9 3v10" />
+              </svg>
+            </button>
           )}
         </div>
-        {mode === 'code' && (
-          <button
-            onClick={onToggleCanvas}
-            title={canvasOpen ? 'Hide canvas' : 'Show canvas'}
-            className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
-              canvasOpen ? 'bg-white/10 text-white' : 'text-ink-400 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <rect x="2" y="3" width="12" height="10" rx="1.5" />
-              <path d="M9 3v10" />
-            </svg>
-          </button>
-        )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-400">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-white/8 bg-white/[0.03] px-2.5 py-1 text-[10px] text-ink-300">
+            Local inference
+          </span>
+          <span className="rounded-full border border-white/8 bg-white/[0.03] px-2.5 py-1 text-[10px] text-ink-300">
+            Private workspace
+          </span>
+          <span className="rounded-full border border-white/8 bg-white/[0.03] px-2.5 py-1 text-[10px] text-ink-300">
+            {mode === 'code' ? 'Canvas enabled' : 'Chat only'}
+          </span>
+        </div>
+        <span className="text-ink-500">{activityLabel}</span>
       </div>
     </div>
   )
@@ -542,8 +665,8 @@ function ModePill({
   return (
     <button
       onClick={onClick}
-      className={`rounded-md px-3 py-1 font-medium transition-all duration-200 ease-out ${
-        active ? 'bg-white/10 text-white shadow-sm scale-[1.02]' : 'text-ink-400 hover:text-ink-100 scale-100'
+      className={`rounded-full px-3 py-1.5 font-medium transition-all duration-200 ease-out ${
+        active ? 'bg-white/12 text-white shadow-sm scale-[1.02]' : 'text-ink-400 hover:bg-white/[0.03] hover:text-ink-100 scale-100'
       }`}
     >
       {children}
@@ -555,12 +678,14 @@ function MessageList({
   messages,
   streaming,
   mode,
-  onRegenerate
+  onRegenerate,
+  onQuickPrompt
 }: {
   messages: ChatMessage[]
   streaming: boolean
   mode: AgentMode
   onRegenerate: () => void
+  onQuickPrompt: (prompt: string) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const atBottomRef = useRef(true)
@@ -586,9 +711,9 @@ function MessageList({
   return (
     <div ref={ref} className="min-h-0 flex-1 overflow-y-auto">
       {empty ? (
-        <EmptyState mode={mode} />
+        <EmptyState mode={mode} onQuickPrompt={onQuickPrompt} />
       ) : (
-        <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-10">
+        <div className="mx-auto flex w-full max-w-[920px] flex-col gap-6 px-3 py-6 sm:px-6 sm:py-10">
           {messages.map((m, i) => (
             <div key={m.id} className="anim-float-in" style={{ animationDelay: `${Math.min(i * 30, 150)}ms` }}>
               <Message
@@ -609,7 +734,13 @@ function MessageList({
   )
 }
 
-function EmptyState({ mode }: { mode: AgentMode }) {
+function EmptyState({
+  mode,
+  onQuickPrompt
+}: {
+  mode: AgentMode
+  onQuickPrompt: (prompt: string) => void
+}) {
   const chatSuggestions = [
     { title: 'Search the web', prompt: 'What are the top AI news stories this week?' },
     { title: 'Explain a concept', prompt: 'Explain the transformer architecture in plain English.' },
@@ -635,42 +766,63 @@ function EmptyState({ mode }: { mode: AgentMode }) {
     }
   ]
   const suggestions = mode === 'code' ? codeSuggestions : chatSuggestions
+  const intro = mode === 'code'
+    ? {
+        title: 'What should we build?',
+        copy: 'Gemma writes files into a workspace and keeps the preview live on the right.',
+        accent: 'Build mode'
+      }
+    : {
+        title: 'How can I help?',
+        copy: 'Running locally. Your messages stay on your Mac and respond in real time.',
+        accent: 'Chat mode'
+      }
+
   return (
-    <div className="anim-fade-in flex h-full flex-col items-center justify-center px-8">
-      <div className="anim-fade-up mb-12 text-center">
-        <img src={gemmaLogoUrl} alt="Gemma" className="mx-auto mb-6 h-20 w-20" draggable={false} />
-        <div className="mb-3 text-[32px] font-semibold tracking-tight text-white">
-          {mode === 'code' ? 'What should we build?' : 'How can I help?'}
+    <div className="anim-fade-in flex h-full items-center justify-center px-4 py-10 sm:px-8">
+      <div className="w-full max-w-[980px]">
+        <div className="surface-panel-strong anim-fade-up mb-6 overflow-hidden rounded-[32px] px-5 py-6 sm:px-8 sm:py-8">
+          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+            <div className="text-center lg:text-left">
+              <div className="mb-3 inline-flex rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-ink-300">
+                {intro.accent}
+              </div>
+              <div className="mb-3 text-[27px] font-semibold tracking-tight text-white sm:text-[36px]">
+                {intro.title}
+              </div>
+              <div className="mx-auto max-w-xl text-sm leading-6 text-ink-400 lg:mx-0">
+                {intro.copy}
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+              <FeaturePill title="Local" copy="No cloud handoff" />
+              <FeaturePill title="Fast" copy="Optimized for quick replies" />
+              <FeaturePill title="Focused" copy="Build or chat in one place" />
+            </div>
+          </div>
         </div>
-        <div className="text-sm text-ink-400">
-          {mode === 'code'
-            ? 'Gemma will write files into a workspace and show a live preview on the right.'
-            : 'Running locally. Your messages never leave your Mac.'}
-        </div>
-      </div>
-      <div className="anim-stagger grid w-full max-w-2xl grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="anim-stagger grid w-full grid-cols-1 gap-2 md:grid-cols-2">
         {suggestions.map((s) => (
           <button
             key={s.title}
-            onClick={() => {
-              const ta = document.querySelector<HTMLTextAreaElement>('[data-composer]')
-              if (ta) {
-                const setter = Object.getOwnPropertyDescriptor(
-                  window.HTMLTextAreaElement.prototype,
-                  'value'
-                )?.set
-                setter?.call(ta, s.prompt)
-                ta.dispatchEvent(new Event('input', { bubbles: true }))
-                ta.focus()
-              }
-            }}
-            className="anim-fade-up rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-left transition hover:border-white/10 hover:bg-white/[0.04] active:scale-[0.98]"
+            onClick={() => onQuickPrompt(s.prompt)}
+            className="anim-fade-up rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-4 text-left transition hover:border-white/[0.14] hover:bg-white/[0.06] active:scale-[0.99]"
           >
             <div className="text-sm font-medium text-white">{s.title}</div>
-            <div className="mt-0.5 text-[12.5px] text-ink-400">{s.prompt}</div>
+            <div className="mt-1 text-[12.5px] leading-5 text-ink-400">{s.prompt}</div>
           </button>
         ))}
+        </div>
       </div>
+    </div>
+  )
+}
+
+function FeaturePill({ title, copy }: { title: string; copy: string }) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+      <div className="text-[11px] font-medium uppercase tracking-[0.2em] text-white">{title}</div>
+      <div className="mt-1 text-[12px] leading-5 text-ink-400">{copy}</div>
     </div>
   )
 }

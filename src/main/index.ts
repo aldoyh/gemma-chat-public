@@ -9,7 +9,7 @@ import {
   shutdownBackend,
   type InferenceBackend
 } from './inference'
-import { ensureCleanFirstRunModelState } from './mlx'
+import { ensureCleanFirstRunModelState, listCachedModels, locateMLX } from './mlx'
 import { isOllamaRunning, listOllamaModels, ollamaModelToInfo } from './ollama'
 import {
   TOOLS,
@@ -48,12 +48,25 @@ app.on('second-instance', () => {
 
 let mainWindow: BrowserWindow | null = null
 
+// Singleflight guard for model-load IPC. React StrictMode and HMR remounts
+// can fire `setup:start` / `model:switch` twice in quick succession. Without
+// a guard, both calls race into ensureBackendRunning → startServer and the
+// second spawn loses to the first on port 11435 (`Address already in use`).
+const modelLoadInflight = new Map<string, Promise<void>>()
+function singleflightModelLoad(key: string, fn: () => Promise<void>): Promise<void> {
+  const existing = modelLoadInflight.get(key)
+  if (existing) return existing
+  const next = fn().finally(() => modelLoadInflight.delete(key))
+  modelLoadInflight.set(key, next)
+  return next
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
-    minWidth: 820,
-    minHeight: 560,
+    minWidth: 720,
+    minHeight: 520,
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#0e0e0e',
@@ -674,41 +687,48 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionCheckHandler(() => true)
 
   ipcMain.handle('setup:start', async (_e, modelConfig: ModelConfig) => {
-    await handleSetup(modelConfig)
+    const key = `setup:${modelConfig.source}:${modelConfig.model ?? modelConfig.path ?? ''}`
+    await singleflightModelLoad(key, () => handleSetup(modelConfig))
   })
 
   ipcMain.handle('model:switch', async (_e, modelConfig: ModelConfig) => {
-    const label = modelConfig.source === 'mlx'
-      ? AVAILABLE_MODELS.find((m) => m.name === modelConfig.model)?.label
-      : 'Local GGUF'
+    const key = `switch:${modelConfig.source}:${modelConfig.model ?? modelConfig.path ?? ''}`
+    await singleflightModelLoad(key, async () => {
+      const label = modelConfig.source === 'mlx'
+        ? AVAILABLE_MODELS.find((m) => m.name === modelConfig.model)?.label
+        : 'Local GGUF'
 
-    send('setup:status', {
-      stage: 'downloading-model',
-      message: `Switching to ${label}…`
-    })
-
-    try {
-      await ensureBackendRunning(modelConfig)
-      send('setup:status', { stage: 'ready', message: 'Ready to chat.' })
-    } catch (e) {
       send('setup:status', {
-        stage: 'error',
-        message: 'Model switch failed',
-        error: (e as Error).message
+        stage: 'downloading-model',
+        message: `Switching to ${label}…`
       })
-    }
+
+      try {
+        await ensureBackendRunning(modelConfig)
+        send('setup:status', { stage: 'ready', message: 'Ready to chat.' })
+      } catch (e) {
+        send('setup:status', {
+          stage: 'error',
+          message: 'Model switch failed',
+          error: (e as Error).message
+        })
+      }
+    })
   })
 
   ipcMain.handle('setup:status', async () => {
     const backend = getCurrentBackend()
     const isReady = backend ? await backend.isReady() : false
-    return { hasMLX: isReady }
+    if (isReady) return { hasMLX: true }
+
+    const mlx = locateMLX()
+    return { hasMLX: Boolean(mlx?.installed) }
   })
 
   ipcMain.handle('models:list-local', async () => {
     const backend = getCurrentBackend()
     if (!backend) {
-      return []
+      return listCachedModels()
     }
     return await backend.listModels()
   })

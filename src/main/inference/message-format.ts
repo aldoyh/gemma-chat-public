@@ -4,7 +4,7 @@ export type InferenceChatMessage = {
 }
 
 export type MLXCompatibleMessage = {
-  role: 'system' | 'user' | 'assistant'
+  role: 'user' | 'assistant'
   content: string
 }
 
@@ -27,28 +27,24 @@ function appendMessage(
 
 /**
  * Gemma chat templates used by mlx_lm reject OpenAI-style system/tool roles
- * and require strict user/assistant alternation. Fold unsupported roles into
- * user turns so the app can keep its richer internal conversation model.
+ * and require strict user/assistant alternation. The server returns HTTP 404
+ * with `{"error": "System role not supported"}` if a system role is sent.
+ *
+ * We fold any system / tool messages into the first user turn so the model
+ * still sees the instructions but the wire format stays valid.
  */
 export function formatMessagesForMLX(
   messages: InferenceChatMessage[]
 ): MLXCompatibleMessage[] {
   const formatted: MLXCompatibleMessage[] = []
   let pendingUserContent: string[] = []
-  let systemEmitted = false
 
   for (const message of messages) {
     const content = message.content.trim()
     if (!content) continue
 
     if (message.role === 'system') {
-      if (!systemEmitted && formatted.length === 0) {
-        // First message: send as real system role so Gemma template can use it
-        formatted.push({ role: 'system', content })
-        systemEmitted = true
-      } else {
-        pendingUserContent.push(`System note:\n${content}`)
-      }
+      pendingUserContent.push(`System instructions:\n${content}`)
       continue
     }
 

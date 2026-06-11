@@ -115,6 +115,14 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
     description: 'Experimental. Larger Gemma 4 variant; keep as manual opt-in for now.'
   },
   {
+    name: 'mlx-community/gemma-4-12b-it-4bit',
+    label: 'Gemma 4 12B',
+    size: '8 GB',
+    sizeBytes: 8_000_000_000,
+    description:
+      'The new 12B Unified Gemma 4 model. Best balance of quality and speed — recommended for coding. Needs ~10 GB unified memory.'
+  },
+  {
     name: 'mlx-community/gemma-4-26b-a4b-it-4bit',
     label: 'Gemma 4 27B MoE',
     size: '16 GB',

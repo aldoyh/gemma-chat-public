@@ -1,7 +1,8 @@
 import { app } from 'electron'
 import { spawn, ChildProcess, spawnSync } from 'child_process'
 import { join } from 'path'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'fs'
+import { createServer } from 'net'
 import { totalmem } from 'os'
 import { AVAILABLE_MODELS } from '../shared/types'
 import { formatMessagesForMLX } from './inference/message-format'
@@ -333,6 +334,34 @@ export async function startServer(
   return serverStartPromise
 }
 
+/**
+ * Try to bind the MLX port. Resolves to a function that releases the probe
+ * socket. Rejects with a clear error if the port is busy and not held by us.
+ * Used to fail fast with a readable message instead of letting the spawn
+ * crash the Python runtime with a `Traceback` from inside the child.
+ */
+async function probePort(port: number): Promise<() => void> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer()
+    probe.unref()
+    probe.once('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        reject(new Error(
+          `Port ${port} is already in use. ` +
+          `Another instance of the MLX server may be running, or a previous ` +
+          `run did not clean up. Quit the conflicting process and try again.`
+        ))
+      } else {
+        reject(err)
+      }
+    })
+    probe.once('listening', () => {
+      resolve(() => probe.close(() => {}))
+    })
+    probe.listen(port, '127.0.0.1')
+  })
+}
+
 async function startServerInternal(
   python: string,
   model: string,
@@ -351,6 +380,17 @@ async function startServerInternal(
     await repairModelConfig(model)
   } catch (e) {
     console.warn('[mlx] Model repair failed (non-critical):', (e as Error).message)
+  }
+
+  // Fail fast if the port is held by something we don't own. Without this,
+  // the Python child crashes inside the http.server bind() call and the
+  // `OSError: [Errno 48] Address already in use` traceback rips through
+  // the model loader, which is hard to diagnose from the UI.
+  let releaseProbe: (() => void) | undefined
+  try {
+    releaseProbe = await probePort(MLX_PORT)
+  } catch (e) {
+    throw new Error(`Cannot start MLX server: ${(e as Error).message}`)
   }
 
   const env = {
@@ -403,6 +443,10 @@ async function startServerInternal(
       detached: false
     }
   )
+  // Release our port probe so the child can bind. The probe and the child
+  // both try 127.0.0.1:11435; we have to drop the probe before the child
+  // reaches httpd.server_bind() or it loses to us.
+  releaseProbe?.()
   currentModel = model
 
   serverProc.stdout?.on('data', (d) => console.log('[mlx]', d.toString().trim()))
@@ -575,16 +619,31 @@ export async function stopServer(): Promise<void> {
       resolve()
     }, 3000)
 
-    proc.on('exit', () => {
-      clearTimeout(timeout)
-      console.log('[mlx] Server process exited cleanly')
-      resolve()
-    })
-
-    try { proc.kill('SIGTERM') } catch {
+    let resolved = false
+    const done = (): void => {
+      if (resolved) return
+      resolved = true
       clearTimeout(timeout)
       resolve()
     }
+
+    proc.on('exit', () => {
+      console.log('[mlx] Server process exited cleanly')
+      done()
+    })
+
+    try {
+      proc.kill('SIGTERM')
+    } catch {
+      done()
+      return
+    }
+
+    // If the SIGTERM landed on a child that already crashed, the 'exit'
+    // event may have fired *before* we attached. Poll once after a tick.
+    setImmediate(() => {
+      if (proc.killed || proc.exitCode != null) done()
+    })
   })
 }
 
@@ -679,6 +738,19 @@ export async function listLocalModels(): Promise<string[]> {
     if (!res.ok) return []
     const data = (await res.json()) as { data?: Array<{ id: string }> }
     return (data.data ?? []).map((m) => m.id)
+  } catch {
+    return []
+  }
+}
+
+export function listCachedModels(): string[] {
+  const hubDir = join(modelsDir(), 'hub')
+  if (!existsSync(hubDir)) return []
+
+  try {
+    return readdirSync(hubDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith('models--'))
+      .map((entry) => entry.name.slice('models--'.length).replace(/--/g, '/'))
   } catch {
     return []
   }
