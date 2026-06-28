@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 
 interface Props {
-  size?: number // Default 120px
+  size?: number // Default 24px
   isAnimating: boolean
 }
 

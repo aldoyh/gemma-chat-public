@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { transcribeAudioBlob } from '../lib/whisper'
-import GemmaBug from './GemmaBug'
+import ThinkingAnimation from './ThinkingAnimation'
 
 interface Props {
   onSend: (text: string) => void
@@ -175,10 +175,20 @@ export default function Composer({
             disabled={streaming || disabled}
           />
           <div className="gemma-chatbox-logo-wrap" aria-hidden="true">
-            <GemmaBug
-              animating={streaming}
-              className={`gemma-chatbox-logo ${logoStateClass}`}
-            />
+            {streaming ? (
+              <ThinkingAnimation size={24} isAnimating={streaming} />
+            ) : (
+              <svg
+                viewBox="0 0 24 24"
+                className={`gemma-chatbox-logo ${logoStateClass}`}
+                style={{ width: 24, height: 24 }}
+              >
+                <path
+                  d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"
+                  fill="currentColor"
+                />
+              </svg>
+            )}
           </div>
           <textarea
             ref={taRef}
@@ -328,5 +338,5 @@ function pickMime(): string | undefined {
 function shortenModelName(model: string): string {
   const parts = model.split('/')
   const tail = parts[parts.length - 1] ?? model
-  return tail.replace(/^mlx-community-/, '').replace(/-4bit$/i, '').replace(/-/g, ' ')
+  return tail.replace(/^mlx-community-/, '').replace(/-/g, ' ')
 }
