@@ -31,11 +31,13 @@ export default function Composer({
   const [recordError, setRecordError] = useState<string | null>(null)
   const [modelProgress, setModelProgress] = useState<{ pct: number; label: string } | null>(null)
   const [historyIndex, setHistoryIndex] = useState(-1)
+  const [showHistory, setShowHistory] = useState(false)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const mediaRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const streamRef = useRef<MediaStream | null>(null)
   const timerRef = useRef<number | null>(null)
+  const historyRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const el = taRef.current
@@ -45,12 +47,24 @@ export default function Composer({
     el.style.height = Math.min(el.scrollHeight, max) + 'px'
   }, [text])
 
+  useEffect(() => {
+    if (!showHistory) return
+    function handleClick(e: MouseEvent): void {
+      if (historyRef.current && !historyRef.current.contains(e.target as Node)) {
+        setShowHistory(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showHistory])
+
   function submit(): void {
     const t = text.trim()
     if (!t || streaming || disabled) return
     onSend(t)
     setText('')
     setHistoryIndex(-1)
+    setShowHistory(false)
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
@@ -63,6 +77,7 @@ export default function Composer({
         const newIndex = historyIndex + 1
         setHistoryIndex(newIndex)
         setText(history[history.length - 1 - newIndex])
+        setShowHistory(true)
       }
     } else if (e.key === 'ArrowDown' && history.length > 0) {
       e.preventDefault()
@@ -70,9 +85,11 @@ export default function Composer({
         const newIndex = historyIndex - 1
         setHistoryIndex(newIndex)
         setText(history[history.length - 1 - newIndex])
+        setShowHistory(true)
       } else if (historyIndex === 0) {
         setHistoryIndex(-1)
         setText('')
+        setShowHistory(false)
       }
     }
   }
@@ -159,6 +176,16 @@ export default function Composer({
     }
   }
 
+  function handleHistoryClick(index: number): void {
+    const message = history[history.length - 1 - index]
+    if (message) {
+      setText(message)
+      setHistoryIndex(index)
+      setShowHistory(false)
+      taRef.current?.focus()
+    }
+  }
+
   const canSend = text.trim().length > 0 && !disabled && recState === 'idle'
   const logoStateClass =
     streaming ? 'is-streaming' : recState === 'recording' ? 'is-listening' : ''
@@ -190,7 +217,7 @@ export default function Composer({
           </div>
         </div>
 
-        <div className="surface-panel-strong flex items-end gap-1.5 rounded-[28px] p-1.5 sm:gap-2 sm:p-2">
+        <div className="surface-panel-strong relative flex items-end gap-1.5 rounded-[28px] p-1.5 sm:gap-2 sm:p-2">
           <MicButton
             state={recState}
             seconds={recordSeconds}
@@ -251,6 +278,40 @@ export default function Composer({
                 <path d="M2 8l12-6-4 14-2-6-6-2z" />
               </svg>
             </button>
+          )}
+          {history.length > 0 && (
+            <button
+              onClick={() => setShowHistory((s) => !s)}
+              className="absolute -top-10 right-0 flex h-8 items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.04] px-2.5 text-[11.5px] text-ink-300 transition-all duration-200 hover:border-white/15 hover:bg-white/[0.07] hover:text-white"
+            >
+              <span>History</span>
+              <svg viewBox="0 0 16 16" className={`h-3 w-3 transition-transform duration-200 ${showHistory ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+          {showHistory && history.length > 0 && (
+            <div
+              ref={historyRef}
+              className="anim-fade-scale surface-panel-strong absolute bottom-full right-0 z-10 mb-2 w-72 max-h-64 overflow-y-auto rounded-[20px] p-1.5"
+            >
+              <div className="mb-1 px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-ink-400">
+                Message history
+              </div>
+              {history.slice().reverse().map((msg, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleHistoryClick(i)}
+                  className={`w-full rounded-lg px-2.5 py-2 text-left text-[12.5px] transition-all duration-150 ${
+                    historyIndex === i
+                      ? 'bg-white/[0.08] text-white'
+                      : 'text-ink-200 hover:bg-white/[0.05]'
+                  }`}
+                >
+                  {msg.slice(0, 50)}{msg.length > 50 ? '…' : ''}
+                </button>
+              ))}
+            </div>
           )}
         </div>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-400">
