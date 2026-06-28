@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { transcribeAudioBlob } from '../lib/whisper'
-import gemmaLogoUrl from '../assets/gemma-logo.png'
+import GemmaBug from './GemmaBug'
 
 interface Props {
   onSend: (text: string) => void
@@ -175,9 +175,8 @@ export default function Composer({
             disabled={streaming || disabled}
           />
           <div className="gemma-chatbox-logo-wrap" aria-hidden="true">
-            <img
-              src={gemmaLogoUrl}
-              alt=""
+            <GemmaBug
+              animating={streaming}
               className={`gemma-chatbox-logo ${logoStateClass}`}
             />
           </div>
