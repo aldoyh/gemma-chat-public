@@ -9,6 +9,8 @@ interface Props {
   disabled: boolean
   placeholder?: string
   model: string
+  history: string[]
+  onHistorySelect: (index: number) => void
 }
 
 type RecState = 'idle' | 'recording' | 'loading-model' | 'transcribing'
@@ -19,13 +21,16 @@ export default function Composer({
   streaming,
   disabled,
   placeholder,
-  model
+  model,
+  history,
+  onHistorySelect
 }: Props) {
   const [text, setText] = useState('')
   const [recState, setRecState] = useState<RecState>('idle')
   const [recordSeconds, setRecordSeconds] = useState(0)
   const [recordError, setRecordError] = useState<string | null>(null)
   const [modelProgress, setModelProgress] = useState<{ pct: number; label: string } | null>(null)
+  const [historyIndex, setHistoryIndex] = useState(-1)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const mediaRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -45,12 +50,30 @@ export default function Composer({
     if (!t || streaming || disabled) return
     onSend(t)
     setText('')
+    setHistoryIndex(-1)
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       submit()
+    } else if (e.key === 'ArrowUp' && history.length > 0) {
+      e.preventDefault()
+      if (historyIndex < history.length - 1) {
+        const newIndex = historyIndex + 1
+        setHistoryIndex(newIndex)
+        setText(history[history.length - 1 - newIndex])
+      }
+    } else if (e.key === 'ArrowDown' && history.length > 0) {
+      e.preventDefault()
+      if (historyIndex > 0) {
+        const newIndex = historyIndex - 1
+        setHistoryIndex(newIndex)
+        setText(history[history.length - 1 - newIndex])
+      } else if (historyIndex === 0) {
+        setHistoryIndex(-1)
+        setText('')
+      }
     }
   }
 
@@ -241,6 +264,11 @@ export default function Composer({
             <span className="rounded-full border border-white/8 bg-white/[0.03] px-2.5 py-1 text-[10px] text-ink-300">
               Voice input
             </span>
+            {history.length > 0 && (
+              <span className="rounded-full border border-white/8 bg-white/[0.03] px-2.5 py-1 text-[10px] text-ink-300">
+                Arrow keys to navigate history
+              </span>
+            )}
           </div>
           {recordError ? (
             <span className="text-red-400/90">{recordError}</span>

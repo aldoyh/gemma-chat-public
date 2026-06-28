@@ -76,6 +76,7 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
       return false
     }
   })
+  const [messageHistory, setMessageHistory] = useState<string[]>([])
   const streamRef = useRef<{ abort: boolean }>({ abort: false })
 
   useEffect(() => {
@@ -115,6 +116,7 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
     const c = newConversation(mode)
     setConversations((cs) => [c, ...cs])
     setActiveId(c.id)
+    setMessageHistory([])
   }
 
   function deleteConversation(id: string): void {
@@ -169,6 +171,8 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
           : c.title
       return { ...c, title, messages: [...c.messages, userMsg, assistantMsg] }
     })
+
+    setMessageHistory((prev) => [...prev, input])
 
     const history = [...conv.messages, userMsg].map((m) => ({
       role: m.role,
@@ -266,6 +270,13 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
     setTimeout(() => handleSend(lastUser.content), 0)
   }
 
+  function handleHistorySelect(index: number): void {
+    const message = messageHistory[messageHistory.length - 1 - index]
+    if (message) {
+      handleSend(message)
+    }
+  }
+
   const canvasVisible =
     (activeConversation.mode === 'code' || activeConversation.canvasOpen === true) &&
     activeConversation.canvasOpen !== false
@@ -277,7 +288,12 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
         activeId={activeId}
         modelConfig={modelConfig}
         collapsed={sidebarCollapsed}
-        onSelect={setActiveId}
+        onSelect={(id) => {
+          setActiveId(id)
+          setMessageHistory(conversations.find((c) => c.id === id)?.messages
+            .filter((m) => m.role === 'user')
+            .map((m) => m.content) || [])
+        }}
         onNew={() => createConversation(activeConversation.mode)}
         onDelete={deleteConversation}
         onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
@@ -316,6 +332,8 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
                 ? 'Describe what to build — a webpage, component, or script…'
                 : 'Message Gemma…'
             }
+            history={messageHistory}
+            onHistorySelect={handleHistorySelect}
           />
         </div>
         {canvasVisible && isWide && (
@@ -470,9 +488,9 @@ function Header({
   }, [pickerOpen])
 
   const modelName =
-    modelConfig.source === 'mlx' ? (modelConfig.model || 'unknown') :
-    modelConfig.source === 'ollama' ? (modelConfig.model || 'unknown') :
-    (modelConfig.path || 'custom')
+    modelConfig.source === 'ollama'
+      ? (modelConfig.model || 'Ollama')
+      : (AVAILABLE_MODELS.find((m) => m.name === modelName)?.label ?? modelName)
 
   const currentLabel =
     modelConfig.source === 'ollama'
