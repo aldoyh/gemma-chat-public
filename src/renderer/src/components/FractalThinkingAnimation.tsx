@@ -5,7 +5,7 @@ interface Props {
   isAnimating: boolean
 }
 
-export default function ThinkingAnimation({ size = 24, isAnimating }: Props) {
+export default function FractalThinkingAnimation({ size = 24, isAnimating }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const animationRef = useRef<number | null>(null)
   const timeRef = useRef(0)

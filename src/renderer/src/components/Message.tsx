@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { marked } from 'marked'
 import type { AgentActivity, ChatMessage, ToolCall } from '@shared/types'
-import gemmaLogoUrl from '../assets/gemma-logo.png'
+import GemmaBug from './GemmaBug'
 
 interface Props {
   message: ChatMessage
@@ -65,10 +65,8 @@ export default function Message({
 
   return (
     <div className="group flex gap-3">
-      <img
-        src={gemmaLogoUrl}
-        alt="Gemma"
-        className="mt-0.5 h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-white/10"
+      <GemmaBug
+        className="mt-0.5 h-8 w-8 shrink-0"
       />
       <div className="selectable min-w-0 flex-1">
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-ink-400">

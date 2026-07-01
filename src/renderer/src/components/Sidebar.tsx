@@ -151,14 +151,27 @@ export default function Sidebar({
               <span className="h-1 w-1 rounded-full bg-white/20" />
               <span className="text-ink-500">Private</span>
             </div>
-            <a
-              href="https://x.com/ammaar"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-ink-400/50 transition hover:text-ink-200"
-            >
-              @ammaar
-            </a>
+            <div className="flex items-center gap-1 text-ink-400/50">
+              <span>Original by</span>
+              <a
+                href="https://x.com/ammaar"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="transition hover:text-ink-200"
+              >
+                @ammaar
+              </a>
+              <span className="h-1 w-1 rounded-full bg-white/20" />
+              <span>Remix by</span>
+              <a
+                href="https://github.com/aldoyh/gemma-chat-public"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="transition hover:text-ink-200"
+              >
+                @aldoyh
+              </a>
+            </div>
           </div>
         )}
       </div>

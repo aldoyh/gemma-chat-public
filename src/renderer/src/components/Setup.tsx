@@ -148,8 +148,8 @@ function WelcomeScreen({
       <div className="flex h-9 items-center justify-end px-4 sm:px-8">
         <LanguageSwitcher />
       </div>
-      <div className="flex flex-1 items-center justify-center px-4 sm:px-8">
-        <div className="no-drag w-full max-w-md">
+      <div className="flex flex-1 items-center justify-center overflow-y-auto px-4 py-6 sm:px-8">
+        <div className="no-drag my-auto w-full max-w-md">
           <div className="anim-fade-up mb-8 text-center">
             <GemmaLogo className="mx-auto mb-5 h-24 w-24" />
             <h1 className={`text-[26px] font-semibold tracking-tight ${language === 'ar' ? 'font-tajawal' : ''}`}>{t.setup.title}</h1>

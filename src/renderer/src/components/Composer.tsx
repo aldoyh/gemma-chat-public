@@ -10,7 +10,6 @@ interface Props {
   placeholder?: string
   model: string
   history: string[]
-  onHistorySelect: (index: number) => void
 }
 
 type RecState = 'idle' | 'recording' | 'loading-model' | 'transcribing'
@@ -22,8 +21,7 @@ export default function Composer({
   disabled,
   placeholder,
   model,
-  history,
-  onHistorySelect
+  history
 }: Props) {
   const [text, setText] = useState('')
   const [recState, setRecState] = useState<RecState>('idle')
@@ -212,8 +210,46 @@ export default function Composer({
                     : 'Ready'}
             </span>
           </div>
-          <div className="hidden rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10.5px] text-ink-300 sm:inline-flex">
-            {modelLabel}
+          <div className="flex items-center gap-2">
+            {history.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowHistory((s) => !s)}
+                  className="flex h-7 items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.04] px-2.5 text-[11px] text-ink-300 transition-all duration-200 hover:border-white/15 hover:bg-white/[0.07] hover:text-white"
+                >
+                  <span>History</span>
+                  <svg viewBox="0 0 16 16" className={`h-2.5 w-2.5 transition-transform duration-200 ${showHistory ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                {showHistory && history.length > 0 && (
+                  <div
+                    ref={historyRef}
+                    className="anim-fade-scale surface-panel-strong absolute right-0 top-full z-10 mt-1 w-72 max-h-64 overflow-y-auto rounded-[20px] p-1.5"
+                  >
+                    <div className="mb-1 px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-ink-400">
+                      Message history
+                    </div>
+                    {history.slice().reverse().map((msg, i) => (
+                      <button
+                        key={i}
+                        onClick={() => handleHistoryClick(i)}
+                        className={`w-full rounded-lg px-2.5 py-2 text-left text-[12.5px] transition-all duration-150 ${
+                          historyIndex === i
+                            ? 'bg-white/[0.08] text-white'
+                            : 'text-ink-200 hover:bg-white/[0.05]'
+                        }`}
+                      >
+                        {msg.slice(0, 50)}{msg.length > 50 ? '…' : ''}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="hidden rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10.5px] text-ink-300 sm:inline-flex">
+              {modelLabel}
+            </div>
           </div>
         </div>
 
@@ -279,40 +315,7 @@ export default function Composer({
               </svg>
             </button>
           )}
-          {history.length > 0 && (
-            <button
-              onClick={() => setShowHistory((s) => !s)}
-              className="absolute -top-10 right-0 flex h-8 items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.04] px-2.5 text-[11.5px] text-ink-300 transition-all duration-200 hover:border-white/15 hover:bg-white/[0.07] hover:text-white"
-            >
-              <span>History</span>
-              <svg viewBox="0 0 16 16" className={`h-3 w-3 transition-transform duration-200 ${showHistory ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          )}
-          {showHistory && history.length > 0 && (
-            <div
-              ref={historyRef}
-              className="anim-fade-scale surface-panel-strong absolute bottom-full right-0 z-10 mb-2 w-72 max-h-64 overflow-y-auto rounded-[20px] p-1.5"
-            >
-              <div className="mb-1 px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-ink-400">
-                Message history
-              </div>
-              {history.slice().reverse().map((msg, i) => (
-                <button
-                  key={i}
-                  onClick={() => handleHistoryClick(i)}
-                  className={`w-full rounded-lg px-2.5 py-2 text-left text-[12.5px] transition-all duration-150 ${
-                    historyIndex === i
-                      ? 'bg-white/[0.08] text-white'
-                      : 'text-ink-200 hover:bg-white/[0.05]'
-                  }`}
-                >
-                  {msg.slice(0, 50)}{msg.length > 50 ? '…' : ''}
-                </button>
-              ))}
-            </div>
-          )}
+
         </div>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-400">
           <div className="flex flex-wrap items-center gap-2">

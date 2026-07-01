@@ -270,13 +270,6 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
     setTimeout(() => handleSend(lastUser.content), 0)
   }
 
-  function handleHistorySelect(index: number): void {
-    const message = messageHistory[messageHistory.length - 1 - index]
-    if (message) {
-      handleSend(message)
-    }
-  }
-
   const canvasVisible =
     (activeConversation.mode === 'code' || activeConversation.canvasOpen === true) &&
     activeConversation.canvasOpen !== false
@@ -333,7 +326,6 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
                 : 'Message Gemma…'
             }
             history={messageHistory}
-            onHistorySelect={handleHistorySelect}
           />
         </div>
         {canvasVisible && isWide && (
@@ -487,15 +479,11 @@ function Header({
     return () => document.removeEventListener('mousedown', handleClick)
   }, [pickerOpen])
 
-  const modelName =
+  const displayModel = modelConfig.model ?? 'gemma-4'
+  const modelLabel =
     modelConfig.source === 'ollama'
       ? (modelConfig.model || 'Ollama')
-      : (AVAILABLE_MODELS.find((m) => m.name === modelName)?.label ?? modelName)
-
-  const currentLabel =
-    modelConfig.source === 'ollama'
-      ? (modelConfig.model || 'Ollama')
-      : (AVAILABLE_MODELS.find((m) => m.name === modelName)?.label ?? modelName)
+      : (AVAILABLE_MODELS.find((m) => m.name === displayModel)?.label ?? displayModel)
 
   const dotColor =
     modelConfig.source === 'ollama' ? 'bg-emerald-400' :
@@ -561,7 +549,7 @@ function Header({
               className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1.5 text-[11.5px] text-ink-300 transition-all duration-200 hover:border-white/15 hover:bg-white/[0.07] hover:text-white"
             >
               <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotColor}`} />
-              {currentLabel}
+              {modelLabel}
               <svg viewBox="0 0 16 16" className={`h-3 w-3 transition-transform duration-200 ${pickerOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -580,10 +568,10 @@ function Header({
                         key={m.name}
                         onClick={() => {
                           setPickerOpen(false)
-                          if (m.name !== modelName) onSwitchModel({ source: 'ollama', model: m.name })
+                          if (m.name !== modelLabel) onSwitchModel({ source: 'ollama', model: m.name })
                         }}
                         className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2.5 text-left transition-all duration-150 ${
-                          m.name === modelName
+                          m.name === modelLabel
                             ? 'bg-white/[0.08] text-white'
                             : 'text-ink-200 hover:bg-white/[0.05]'
                         }`}
@@ -592,7 +580,7 @@ function Header({
                           <div className="text-[12.5px] font-medium">{m.label || m.name}</div>
                           {m.size && <div className="mt-0.5 text-[11px] text-ink-400">{m.size}</div>}
                         </div>
-                        {m.name === modelName && (
+                        {m.name === modelLabel && (
                           <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
@@ -606,10 +594,10 @@ function Header({
                       key={m.name}
                       onClick={() => {
                         setPickerOpen(false)
-                        if (m.name !== modelName) onSwitchModel({ source: 'mlx', model: m.name })
+                        if (m.name !== modelLabel) onSwitchModel({ source: 'mlx', model: m.name })
                       }}
                       className={`flex w-full items-center justify-between rounded-xl px-2.5 py-2.5 text-left transition-all duration-150 ${
-                        m.name === modelName
+                        m.name === modelLabel
                           ? 'bg-white/[0.08] text-white'
                           : 'text-ink-200 hover:bg-white/[0.05]'
                       }`}
@@ -625,7 +613,7 @@ function Header({
                         </div>
                         <div className="mt-0.5 text-[11px] text-ink-400">{m.size}</div>
                       </div>
-                      {m.name === modelName && (
+                      {m.name === modelLabel && (
                         <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M3 8.5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>

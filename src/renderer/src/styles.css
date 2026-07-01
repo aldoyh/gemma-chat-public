@@ -453,13 +453,32 @@ textarea,
   }
 }
 
-@keyframes gemma-logo-spin {
-  from {
-    transform: rotate(0deg) scale(1.04);
-  }
-  to {
-    transform: rotate(360deg) scale(1.04);
-  }
+/* ── Walking bug leg animations ── */
+
+@keyframes gemma-bug-walk-front-left {
+  0%, 100% { transform: rotate(-14deg); }
+  50% { transform: rotate(16deg); }
+}
+@keyframes gemma-bug-walk-mid-left {
+  0%, 100% { transform: rotate(10deg); }
+  50% { transform: rotate(-10deg); }
+}
+@keyframes gemma-bug-walk-back-left {
+  0%, 100% { transform: rotate(12deg); }
+  50% { transform: rotate(-14deg); }
+}
+
+@keyframes gemma-bug-walk-front-right {
+  0%, 100% { transform: rotate(10deg); }
+  50% { transform: rotate(-12deg); }
+}
+@keyframes gemma-bug-walk-mid-right {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(8deg); }
+}
+@keyframes gemma-bug-walk-back-right {
+  0%, 100% { transform: rotate(-10deg); }
+  50% { transform: rotate(12deg); }
 }
 
 @keyframes gemma-logo-listen {
@@ -489,14 +508,13 @@ textarea,
 .gemma-chatbox-logo {
   height: 1.4rem;
   width: 1.4rem;
-  border-radius: 9999px;
-  object-fit: cover;
+  display: block;
   animation: gemma-logo-breathe 2.4s ease-in-out infinite;
   transform-origin: center;
 }
 
 .gemma-chatbox-logo.is-streaming {
-  animation: gemma-logo-spin 1.7s linear infinite;
+  animation: gemma-logo-breathe 1.2s ease-in-out infinite;
 }
 
 .gemma-chatbox-logo.is-listening {
