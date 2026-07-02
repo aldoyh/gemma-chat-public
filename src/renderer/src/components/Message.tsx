@@ -50,9 +50,12 @@ export default function Message({
 
   if (isUser) {
     return (
-      <div className="flex justify-end">
+      <div className="group flex flex-col items-end gap-1.5">
         <div className="selectable max-w-[88%] rounded-[22px] rounded-br-md border border-white/10 bg-white/[0.1] px-4 py-3 text-[14.5px] leading-relaxed text-white shadow-[0_12px_28px_rgba(0,0,0,0.24)] sm:max-w-[78%]">
           <div className="whitespace-pre-wrap">{message.content}</div>
+        </div>
+        <div className="opacity-0 transition group-hover:opacity-100">
+          <CopyButton text={message.content} />
         </div>
       </div>
     )
@@ -111,25 +114,38 @@ export default function Message({
           </div>
         )}
 
-        {onRegenerate && (
+        {parsed.visible && (
           <div className="mt-3 flex gap-2 opacity-0 transition group-hover:opacity-100">
-            <button
-              onClick={onRegenerate}
-              className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] text-ink-300 hover:bg-white/[0.07] hover:text-white"
-            >
-              ↻ Regenerate
-            </button>
-            <button
-              onClick={() => navigator.clipboard.writeText(parsed.visible)}
-              className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] text-ink-300 hover:bg-white/[0.07] hover:text-white"
-            >
-              Copy
-            </button>
+            {onRegenerate && (
+              <button
+                onClick={onRegenerate}
+                className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] text-ink-300 hover:bg-white/[0.07] hover:text-white"
+              >
+                ↻ Regenerate
+              </button>
+            )}
+            <CopyButton text={parsed.visible} />
           </div>
         )}
         </div>
       </div>
     </div>
+  )
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(text)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      }}
+      className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] text-ink-300 hover:bg-white/[0.07] hover:text-white"
+    >
+      {copied ? 'Copied' : 'Copy'}
+    </button>
   )
 }
 

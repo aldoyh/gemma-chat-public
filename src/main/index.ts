@@ -15,6 +15,7 @@ import {
   TOOLS,
   chatSystemPrompt,
   codeSystemPrompt,
+  enhancePromptSystem,
   findNextAction,
   emitSafeBoundary,
   runTool,
@@ -22,6 +23,7 @@ import {
   type ToolContext
 } from './tools'
 import { getExampleRecipe, type ExampleRecipe } from './example-recipes'
+import { abortAll } from './abort-registry'
 import {
   ensureWorkspace,
   startWorkspaceServer,
@@ -32,7 +34,7 @@ import {
   workspaceDir,
   wsWriteFile
 } from './workspace'
-import type { ChatRequest, StreamChunk, ToolCall, ModelConfig } from '../shared/types'
+import type { ChatRequest, EnhancePromptRequest, StreamChunk, ToolCall, ModelConfig } from '../shared/types'
 
 // Single instance lock — prevents multiple app instances from running simultaneously
 if (!app.requestSingleInstanceLock()) {
@@ -698,6 +700,12 @@ app.whenReady().then(async () => {
         ? AVAILABLE_MODELS.find((m) => m.name === modelConfig.model)?.label
         : 'Local GGUF'
 
+      // The renderer disables model switching while a response is streaming,
+      // but abort any in-flight generation anyway (defense in depth) so a
+      // switch triggered another way never leaves a chat mid-stream when the
+      // backend it's reading from gets killed/restarted below.
+      abortAll(chatAbortControllers)
+
       send('setup:status', {
         stage: 'downloading-model',
         message: `Switching to ${label}…`
@@ -751,6 +759,23 @@ app.whenReady().then(async () => {
   ipcMain.handle('chat:abort', async (_e, conversationId: string) => {
     const c = chatAbortControllers.get(conversationId)
     if (c) c.abort()
+  })
+
+  ipcMain.handle('prompt:enhance', async (_e, req: EnhancePromptRequest) => {
+    const backend = getCurrentBackend()
+    if (!backend) throw new Error('No inference backend available.')
+    let out = ''
+    for await (const chunk of backend.chat({
+      model: req.model,
+      messages: [
+        { role: 'system', content: enhancePromptSystem() },
+        { role: 'user', content: req.text }
+      ],
+      temperature: 0.4
+    })) {
+      if (chunk.content) out += chunk.content
+    }
+    return { text: out.trim() }
   })
 
   ipcMain.handle('tools:list', async () => {

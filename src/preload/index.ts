@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
 import type {
   ChatRequest,
+  EnhancePromptRequest,
   SetupStatus,
   StreamChunk,
   WorkspaceInfo,
@@ -49,6 +50,9 @@ const api = {
 
   abortChat: (conversationId: string): Promise<void> =>
     ipcRenderer.invoke('chat:abort', conversationId),
+
+  enhancePrompt: (req: EnhancePromptRequest): Promise<{ text: string }> =>
+    ipcRenderer.invoke('prompt:enhance', req),
 
   listTools: (): Promise<Array<{ name: string; description: string; mode: string }>> =>
     ipcRenderer.invoke('tools:list'),

@@ -14,6 +14,7 @@
  *   5. write_file args      (getWriteFileContent)
  *   6. prompt hygiene       (no "Coming Soon" poison, real example present)
  *   7. model registry       (12B included, sizes plausible, no duplicate names)
+ *   8. abort registry       (abortAll aborts every tracked chat controller)
  */
 import { build } from 'esbuild'
 import { rm, mkdir, readFile } from 'fs/promises'
@@ -55,6 +56,7 @@ async function main() {
   const tools = await bundle('tools', `${TS}/test-support/pure.ts`, 'tools.mjs')
   const html = await bundle('html-assets', `${TS}/html-assets.ts`, 'html-assets.mjs')
   const wfa = await bundle('write-file-args', `${TS}/write-file-args.ts`, 'write-file-args.mjs')
+  const abortRegistry = await bundle('abort-registry', `${TS}/abort-registry.ts`, 'abort-registry.mjs')
 
   let passed = 0
   const test = (name, fn) => {
@@ -69,7 +71,7 @@ async function main() {
     }
   }
 
-  console.log('\n[1/7] message-format')
+  console.log('\n[1/8] message-format')
   test('folds system into the first user turn', () => {
     const out = fmt.formatMessagesForMLX([
       { role: 'system', content: 'You are concise.' },
@@ -107,7 +109,7 @@ async function main() {
     assert.match(out[0].content, /A.*B/s)
   })
 
-  console.log('\n[2/7] action parser (findNextAction)')
+  console.log('\n[2/8] action parser (findNextAction)')
   test('parses simple action', () => {
     const r = tools.findNextAction(
       'x<action name="write_file"><path>app.js</path><content>console.log(1)</content></action>'
@@ -146,7 +148,7 @@ async function main() {
     assert.equal(r.args.query, 'q')
   })
 
-  console.log('\n[3/7] cleanFileContent')
+  console.log('\n[3/8] cleanFileContent')
   test('strips ```lang fences', () => {
     const out = tools.cleanFileContent('```html\n<!doctype html><body>x</body>\n``` junk', 'index.html')
     assert.ok(!out.includes('```'))
@@ -169,7 +171,7 @@ async function main() {
     assert.equal(out.trim(), 'a{color:red}\nb{color:blue}')
   })
 
-  console.log('\n[4/7] html asset repair')
+  console.log('\n[4/8] html asset repair')
   test('injects missing stylesheet + script', () => {
     const repaired = html.ensureHtmlAssetReferences(
       '<!doctype html><html><head></head><body></body></html>',
@@ -193,7 +195,7 @@ async function main() {
     assert.equal((after.match(/style\.css/g) || []).length, 1)
   })
 
-  console.log('\n[5/7] write_file args')
+  console.log('\n[5/8] write_file args')
   test('accepts <content> string', () => {
     assert.equal(wfa.getWriteFileContent({ path: 'x', content: 'y' }), 'y')
   })
@@ -204,7 +206,7 @@ async function main() {
     assert.equal(wfa.getWriteFileContent({ path: 'x', content: 42 }), null)
   })
 
-  console.log('\n[6/7] prompt hygiene')
+  console.log('\n[6/8] prompt hygiene')
   const toolsSrc = await readFile(`${TS}/tools.ts`, 'utf8')
   test('no "Coming Soon" placeholder in codeSystemPrompt', () => {
     for (const p of ['Coming Soon</title>', '<h1>Coming soon</h1>', 'Notify me']) {
@@ -228,8 +230,17 @@ async function main() {
     assert.ok(code.includes('GOAL'))
     assert.ok(code.includes('write_file'))
   })
+  test('enhancePromptSystem instructs a rewrite-only response', () => {
+    assert.ok(typeof tools.enhancePromptSystem === 'function')
+    const p = tools.enhancePromptSystem()
+    assert.match(p, /rewrite/i)
+    assert.match(p, /ONLY the rewritten/)
+    for (const poison of ['Coming Soon</title>', '<h1>Coming soon</h1>', 'Notify me']) {
+      assert.ok(!p.includes(poison), `poison: ${poison}`)
+    }
+  })
 
-  console.log('\n[7/7] model registry')
+  console.log('\n[7/8] model registry')
   const shared = await readFile('src/shared/types.ts', 'utf8')
   test('Gemma 4 12B is registered', () => {
     assert.match(shared, /gemma-4-12b/)
@@ -249,6 +260,18 @@ async function main() {
     const unique = new Set(names)
     assert.equal(unique.size, names.length, `duplicates: ${names.length - unique.size}`)
     assert.ok(names.length >= 5, `expected ≥5 models, got ${names.length}`)
+  })
+
+  console.log('\n[8/8] abort registry')
+  test('aborts every tracked controller', () => {
+    const a = new AbortController()
+    const b = new AbortController()
+    abortRegistry.abortAll(new Map([['conv-1', a], ['conv-2', b]]))
+    assert.equal(a.signal.aborted, true)
+    assert.equal(b.signal.aborted, true)
+  })
+  test('is a no-op on an empty registry', () => {
+    assert.doesNotThrow(() => abortRegistry.abortAll(new Map()))
   })
 
   console.log(`\n── ${passed} tests passed ──`)

@@ -48,6 +48,11 @@ export interface ChatRequest {
   mode: AgentMode
 }
 
+export interface EnhancePromptRequest {
+  model: string
+  text: string
+}
+
 export interface WorkspaceInfo {
   conversationId: string
   path: string

@@ -144,14 +144,14 @@ export default function Sidebar({
             <span title={`${badgeLabel} backend`} className={`inline-block h-2 w-2 rounded-full ${badgeColor}`} />
           </div>
         ) : (
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-2">
               <span className={`inline-block h-1.5 w-1.5 rounded-full ${badgeColor}`} />
               <span>{badgeLabel}</span>
               <span className="h-1 w-1 rounded-full bg-white/20" />
               <span className="text-ink-500">Private</span>
             </div>
-            <div className="flex items-center gap-1 text-ink-400/50">
+            <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[10px] leading-tight text-ink-400/50">
               <span>Original by</span>
               <a
                 href="https://x.com/ammaar"
@@ -161,7 +161,7 @@ export default function Sidebar({
               >
                 @ammaar
               </a>
-              <span className="h-1 w-1 rounded-full bg-white/20" />
+              <span className="text-ink-400/30">·</span>
               <span>Remix by</span>
               <a
                 href="https://github.com/aldoyh/gemma-chat-public"

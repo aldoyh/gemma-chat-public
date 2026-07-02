@@ -30,6 +30,9 @@ export default function Composer({
   const [modelProgress, setModelProgress] = useState<{ pct: number; label: string } | null>(null)
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [showHistory, setShowHistory] = useState(false)
+  const [enhancing, setEnhancing] = useState(false)
+  const [enhanceError, setEnhanceError] = useState<string | null>(null)
+  const [undoText, setUndoText] = useState<string | null>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const mediaRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -63,6 +66,33 @@ export default function Composer({
     setText('')
     setHistoryIndex(-1)
     setShowHistory(false)
+    setUndoText(null)
+  }
+
+  async function handleEnhance(): Promise<void> {
+    const draft = text.trim()
+    if (!draft || streaming || disabled || enhancing) return
+    setEnhancing(true)
+    setEnhanceError(null)
+    try {
+      const result = await window.api.enhancePrompt({ model, text: draft })
+      if (result.text) {
+        setUndoText(text)
+        setText(result.text)
+        setTimeout(() => taRef.current?.focus(), 0)
+      }
+    } catch (e) {
+      setEnhanceError((e as Error).message || 'Could not enhance prompt')
+    } finally {
+      setEnhancing(false)
+    }
+  }
+
+  function undoEnhance(): void {
+    if (undoText == null) return
+    setText(undoText)
+    setUndoText(null)
+    setTimeout(() => taRef.current?.focus(), 0)
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
@@ -260,6 +290,11 @@ export default function Composer({
             onClick={onMicClick}
             disabled={streaming || disabled}
           />
+          <EnhanceButton
+            onClick={handleEnhance}
+            enhancing={enhancing}
+            disabled={!text.trim() || streaming || disabled}
+          />
           <div className="gemma-chatbox-logo-wrap" aria-hidden="true">
             {streaming ? (
               <ThinkingAnimation size={24} isAnimating={streaming} />
@@ -328,6 +363,14 @@ export default function Composer({
             <span className="rounded-full border border-white/8 bg-white/[0.03] px-2.5 py-1 text-[10px] text-ink-300">
               Voice input
             </span>
+            {undoText != null && (
+              <button
+                onClick={undoEnhance}
+                className="rounded-full border border-white/8 bg-white/[0.03] px-2.5 py-1 text-[10px] text-ink-300 transition hover:border-white/15 hover:bg-white/[0.07] hover:text-white"
+              >
+                Undo enhance
+              </button>
+            )}
             {history.length > 0 && (
               <span className="rounded-full border border-white/8 bg-white/[0.03] px-2.5 py-1 text-[10px] text-ink-300">
                 Arrow keys to navigate history
@@ -336,6 +379,10 @@ export default function Composer({
           </div>
           {recordError ? (
             <span className="text-red-400/90">{recordError}</span>
+          ) : enhanceError ? (
+            <span className="text-red-400/90">{enhanceError}</span>
+          ) : enhancing ? (
+            <span className="shimmer-text">Enhancing prompt…</span>
           ) : recState === 'recording' ? (
             <span>Click mic again to stop.</span>
           ) : recState === 'loading-model' ? (
@@ -409,6 +456,37 @@ function MicButton({
           strokeLinecap="round"
         />
       </svg>
+    </button>
+  )
+}
+
+function EnhanceButton({
+  onClick,
+  enhancing,
+  disabled
+}: {
+  onClick: () => void
+  enhancing: boolean
+  disabled: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled || enhancing}
+      title="Enhance prompt"
+      aria-label="Enhance prompt"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink-400 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {enhancing ? (
+        <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="40 100" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 16 16" className="h-4 w-4" fill="currentColor">
+          <path d="M8 1l1.2 3.3L12.5 5.5 9.2 6.8 8 10.1 6.8 6.8 3.5 5.5 6.8 4.3z" />
+          <path d="M13.2 9.4l.55 1.45 1.45.55-1.45.55-.55 1.45-.55-1.45-1.45-.55 1.45-.55z" />
+        </svg>
+      )}
     </button>
   )
 }

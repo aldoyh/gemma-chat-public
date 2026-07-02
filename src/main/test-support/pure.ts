@@ -8,6 +8,7 @@ export {
   findNextAction,
   chatSystemPrompt,
   codeSystemPrompt,
+  enhancePromptSystem,
   TOOLS,
   type ToolSpec,
   type ParsedAction

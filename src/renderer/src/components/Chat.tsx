@@ -302,6 +302,7 @@ export default function Chat({ modelConfig, onSwitchModel, onActivityChange }: P
             onToggleMode={toggleMode}
             onToggleCanvas={toggleCanvas}
             onSwitchModel={onSwitchModel}
+            streaming={streaming}
             activityState={activityState}
             cpuPercent={cpuPercent}
             sidebarCollapsed={sidebarCollapsed}
@@ -439,6 +440,7 @@ function Header({
   onToggleMode,
   onToggleCanvas,
   onSwitchModel,
+  streaming,
   activityState,
   cpuPercent,
   sidebarCollapsed,
@@ -452,6 +454,7 @@ function Header({
   onToggleMode: () => void
   onToggleCanvas: () => void
   onSwitchModel: (config: ModelConfig) => void
+  streaming: boolean
   activityState: ActivityState
   cpuPercent: number
   sidebarCollapsed: boolean
@@ -478,6 +481,12 @@ function Header({
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [pickerOpen])
+
+  // Close the picker (and refuse to reopen it) once a response starts streaming —
+  // switching models mid-stream kills the backend serving the in-flight generation.
+  useEffect(() => {
+    if (streaming) setPickerOpen(false)
+  }, [streaming])
 
   const displayModel = modelConfig.model ?? 'gemma-4'
   const modelLabel =
@@ -545,8 +554,12 @@ function Header({
         <div className="no-drag flex shrink-0 items-center justify-end gap-2">
           <div className="relative" ref={pickerRef}>
             <button
-              onClick={() => setPickerOpen((o) => !o)}
-              className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1.5 text-[11.5px] text-ink-300 transition-all duration-200 hover:border-white/15 hover:bg-white/[0.07] hover:text-white"
+              onClick={() => !streaming && setPickerOpen((o) => !o)}
+              disabled={streaming}
+              title={streaming ? 'Finish the current response before switching models' : undefined}
+              className={`flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1.5 text-[11.5px] text-ink-300 transition-all duration-200 ${
+                streaming ? 'cursor-not-allowed opacity-50' : 'hover:border-white/15 hover:bg-white/[0.07] hover:text-white'
+              }`}
             >
               <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotColor}`} />
               {modelLabel}

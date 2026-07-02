@@ -576,6 +576,14 @@ function chatSystemPrompt(enableTools) {
     renderToolHelp("chat")
   ].join("\n");
 }
+function enhancePromptSystem() {
+  return [
+    "You rewrite a user's draft chat message to be clearer and more specific, so it gets a better response.",
+    "Preserve their original intent, tone, and any code/data they included verbatim.",
+    "Do not answer the message, add commentary, or wrap it in quotes.",
+    "Return ONLY the rewritten message text, nothing else."
+  ].join("\n");
+}
 function codeSystemPrompt(workspacePath, previewHref) {
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const day = (/* @__PURE__ */ new Date()).toLocaleDateString("en-US", { weekday: "long" });
@@ -678,5 +686,6 @@ export {
   chatSystemPrompt,
   cleanFileContent,
   codeSystemPrompt,
+  enhancePromptSystem,
   findNextAction
 };

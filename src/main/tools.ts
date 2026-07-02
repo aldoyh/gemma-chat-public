@@ -463,6 +463,15 @@ export function chatSystemPrompt(enableTools: boolean): string {
   ].join('\n')
 }
 
+export function enhancePromptSystem(): string {
+  return [
+    "You rewrite a user's draft chat message to be clearer and more specific, so it gets a better response.",
+    'Preserve their original intent, tone, and any code/data they included verbatim.',
+    'Do not answer the message, add commentary, or wrap it in quotes.',
+    'Return ONLY the rewritten message text, nothing else.'
+  ].join('\n')
+}
+
 export function codeSystemPrompt(workspacePath: string, previewHref: string): string {
   const now = new Date().toISOString()
   const day = new Date().toLocaleDateString('en-US', { weekday: 'long' })
